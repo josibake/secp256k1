@@ -10,6 +10,7 @@
 #include "../../../include/secp256k1_ecdh.h"
 #include "../../../include/secp256k1_extrakeys.h"
 #include "../../../include/secp256k1_silentpayments.h"
+#include "../../hash.h"
 
 /** Set hash state to the BIP340 tagged hash midstate for "BIP0352/Inputs". */
 static void secp256k1_silentpayments_sha256_init_inputs(secp256k1_sha256* hash) {
@@ -259,6 +260,62 @@ int secp256k1_silentpayments_create_address_spend_pubkey(const secp256k1_context
     ser_ret = secp256k1_eckey_pubkey_serialize(&B_m, l_addr_spend_pubkey33, &ser_size, 1);
     VERIFY_CHECK(ser_ret && ser_size == 33);
     (void)ser_ret;
+
+    return 1;
+}
+
+/** Set hash state to the BIP340 tagged hash midstate for "BIP0352/SharedSecret". */
+static void secp256k1_silentpayments_sha256_init_sharedsecret(secp256k1_sha256* hash) {
+    secp256k1_sha256_initialize(hash);
+    hash->s[0] = 0x88831537ul;
+    hash->s[1] = 0x5127079bul;
+    hash->s[2] = 0x69c2137bul;
+    hash->s[3] = 0xab0303e6ul;
+    hash->s[4] = 0x98fa21faul;
+    hash->s[5] = 0x4a888523ul;
+    hash->s[6] = 0xbd99daabul;
+    hash->s[7] = 0xf25e5e0aul;
+
+    hash->bytes = 64;
+}
+
+static void secp256k1_silentpayments_create_t_k(secp256k1_scalar *t_k_scalar, const unsigned char *shared_secret33, unsigned int k) {
+    secp256k1_sha256 hash;
+    unsigned char hash_ser[32];
+    unsigned char k_serialized[4];
+
+    /* Compute t_k = hash(shared_secret || ser_32(k))  [sha256 with tag "BIP0352/SharedSecret"] */
+    secp256k1_silentpayments_sha256_init_sharedsecret(&hash);
+    secp256k1_sha256_write(&hash, shared_secret33, 33);
+    secp256k1_write_be32(k_serialized, k);
+    secp256k1_sha256_write(&hash, k_serialized, sizeof(k_serialized));
+    secp256k1_sha256_finalize(&hash, hash_ser);
+    secp256k1_scalar_set_b32(t_k_scalar, hash_ser, NULL);
+}
+
+int secp256k1_silentpayments_create_output_pubkey(const secp256k1_context *ctx, secp256k1_xonly_pubkey *output_xonly_pubkey, const unsigned char *shared_secret33, const secp256k1_pubkey *receiver_spend_pubkey, unsigned int k, const unsigned char *label_tweak32) {
+    secp256k1_ge P_output;
+    secp256k1_scalar t_k_scalar;
+
+    /* Sanity check inputs */
+    VERIFY_CHECK(ctx != NULL);
+    ARG_CHECK(output_xonly_pubkey != NULL);
+    ARG_CHECK(receiver_spend_pubkey != NULL);
+
+    /* Apply label tweak if provided: B_m = B_spend + label_tweak * G */
+    secp256k1_pubkey_load(ctx, &P_output, receiver_spend_pubkey);
+    if (label_tweak32 != NULL) {
+        if (!secp256k1_ec_pubkey_tweak_add_helper(&P_output, label_tweak32)) {
+            return 0;
+        }
+    }
+
+    /* Calculate and return P_output = B_m + t_k * G */
+    secp256k1_silentpayments_create_t_k(&t_k_scalar, shared_secret33, k);
+    if (!secp256k1_eckey_pubkey_tweak_add(&P_output, &t_k_scalar)) {
+        return 0;
+    }
+    secp256k1_xonly_pubkey_save(output_xonly_pubkey, &P_output);
 
     return 1;
 }
