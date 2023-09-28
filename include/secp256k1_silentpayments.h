@@ -123,6 +123,30 @@ SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int secp256k1_silentpayments_create_p
     const unsigned char *outpoint_smallest36
 ) SECP256K1_ARG_NONNULL(1) SECP256K1_ARG_NONNULL(2) SECP256K1_ARG_NONNULL(7);
 
+/** Create Silent Payment shared secret for the receiver side.
+ *
+ *  Given public input tweak data A_tweaked and a recipient's scan private key
+ *  b_scan, compute the corresponding shared secret using ECDH:
+ *
+ *  shared_secret = A_tweaked * b_scan
+ *  (where A_tweaked = (A_1 + A_2 + ... + A_n) * input_hash)
+ *
+ *  The resulting data is needed as input for creating silent payments outputs
+ *  belonging to the same receiver scan public key.
+ *
+ *  Returns: 1 if shared secret creation was successful. 0 if an error occured.
+ *  Args:                  ctx: pointer to a context object
+ *  Out:       shared_secret33: pointer to the resulting 33-byte shared secret
+ *  In:      public_tweak_data: pointer to the public tweak data
+ *        receiver_scan_seckey: pointer to the receiver's scan private key
+ */
+SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int secp256k1_silentpayments_receive_create_shared_secret(
+    const secp256k1_context *ctx,
+    unsigned char *shared_secret33,
+    const secp256k1_pubkey *public_tweak_data,
+    const unsigned char *receiver_scan_seckey
+) SECP256K1_ARG_NONNULL(1) SECP256K1_ARG_NONNULL(2) SECP256K1_ARG_NONNULL(3) SECP256K1_ARG_NONNULL(4);
+
 #ifdef __cplusplus
 }
 #endif

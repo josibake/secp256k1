@@ -187,6 +187,20 @@ int secp256k1_silentpayments_create_public_tweak_data(const secp256k1_context *c
     return 1;
 }
 
-/* TODO: implement functions for receiver side. */
+int secp256k1_silentpayments_receive_create_shared_secret(const secp256k1_context *ctx, unsigned char *shared_secret33, const secp256k1_pubkey *public_tweak_data, const unsigned char *receiver_scan_seckey) {
+    /* Sanity check inputs. */
+    VERIFY_CHECK(ctx != NULL);
+    ARG_CHECK(shared_secret33 != NULL);
+    memset(shared_secret33, 0, 33);
+    ARG_CHECK(public_tweak_data != NULL);
+    ARG_CHECK(receiver_scan_seckey != NULL);
+
+    /* Compute shared_secret = A_tweaked * b_scan */
+    if (!secp256k1_ecdh(ctx, shared_secret33, public_tweak_data, receiver_scan_seckey, secp256k1_silentpayments_ecdh_return_pubkey, NULL)) {
+        return 0;
+    }
+
+    return 1;
+}
 
 #endif
