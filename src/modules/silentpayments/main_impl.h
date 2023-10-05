@@ -7,6 +7,8 @@
 #define SECP256K1_MODULE_SILENTPAYMENTS_MAIN_H
 
 #include "../../../include/secp256k1.h"
+#include "../../../include/secp256k1_ecdh.h"
+#include "../../../include/secp256k1_extrakeys.h"
 #include "../../../include/secp256k1_silentpayments.h"
 
 /** Set hash state to the BIP340 tagged hash midstate for "BIP0352/Inputs". */
@@ -98,6 +100,46 @@ int secp256k1_silentpayments_create_private_tweak_data(const secp256k1_context *
     /* Compute a_tweaked = a_sum * input_hash */
     secp256k1_scalar_mul(&a_sum, &a_sum, &input_hash_scalar);
     secp256k1_scalar_get_b32(private_tweak_data32, &a_sum);
+
+    return 1;
+}
+
+/* secp256k1_ecdh expects a hash function to be passed in or uses its default
+ * hashing function. We don't want to hash the ECDH result, so we define a
+ * custom function which simply returns the pubkey without hashing.
+ */
+static int secp256k1_silentpayments_ecdh_return_pubkey(unsigned char *output, const unsigned char *x32, const unsigned char *y32, void *data) {
+    secp256k1_ge point;
+    secp256k1_fe x, y;
+    size_t ser_size;
+    int ser_ret;
+
+    (void)data;
+    /* Parse point as group element */
+    if (!secp256k1_fe_set_b32_limit(&x, x32) || !secp256k1_fe_set_b32_limit(&y, y32)) {
+        return 0;
+    }
+    secp256k1_ge_set_xy(&point, &x, &y);
+
+    /* Serialize as compressed pubkey */
+    ser_ret = secp256k1_eckey_pubkey_serialize(&point, output, &ser_size, 1);
+    VERIFY_CHECK(ser_ret && ser_size == 33);
+    (void)ser_ret;
+
+    return 1;
+}
+
+int secp256k1_silentpayments_send_create_shared_secret(const secp256k1_context *ctx, unsigned char *shared_secret33, const unsigned char *private_tweak_data32, const secp256k1_pubkey *receiver_scan_pubkey) {
+    /* Sanity check inputs */
+    ARG_CHECK(shared_secret33 != NULL);
+    memset(shared_secret33, 0, 33);
+    ARG_CHECK(private_tweak_data32 != NULL);
+    ARG_CHECK(receiver_scan_pubkey != NULL);
+
+    /* Compute shared_secret = a_tweaked * B_scan */
+    if (!secp256k1_ecdh(ctx, shared_secret33, receiver_scan_pubkey, private_tweak_data32, secp256k1_silentpayments_ecdh_return_pubkey, NULL)) {
+        return 0;
+    }
 
     return 1;
 }
