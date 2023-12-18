@@ -144,6 +144,49 @@ int secp256k1_silentpayments_send_create_shared_secret(const secp256k1_context *
     return 1;
 }
 
+int secp256k1_silentpayments_create_public_tweak_data(const secp256k1_context *ctx, secp256k1_pubkey *public_tweak_data, const secp256k1_pubkey *plain_pubkeys, size_t n_plain_pubkeys, const secp256k1_xonly_pubkey *xonly_pubkeys, size_t n_xonly_pubkeys, const unsigned char *outpoint_smallest36) {
+    size_t i;
+    secp256k1_ge A_sum_ge, addend;
+    secp256k1_gej A_sum_gej;
+    secp256k1_scalar input_hash_scalar;
+
+    /* Sanity check inputs */
+    VERIFY_CHECK(ctx != NULL);
+    ARG_CHECK(public_tweak_data != NULL);
+    ARG_CHECK(plain_pubkeys == NULL || n_plain_pubkeys >= 1);
+    ARG_CHECK(xonly_pubkeys == NULL || n_xonly_pubkeys >= 1);
+    ARG_CHECK((plain_pubkeys != NULL) || (xonly_pubkeys != NULL));
+    ARG_CHECK((n_plain_pubkeys + n_xonly_pubkeys) >= 1);
+    ARG_CHECK(outpoint_smallest36 != NULL);
+
+    /* Compute input public keys sum: A_sum = A_1 + A_2 + ... + A_n */
+    secp256k1_gej_set_infinity(&A_sum_gej);
+    for (i = 0; i < n_plain_pubkeys; i++) {
+        secp256k1_pubkey_load(ctx, &addend, &plain_pubkeys[i]);
+        secp256k1_gej_add_ge(&A_sum_gej, &A_sum_gej, &addend);
+    }
+    for (i = 0; i < n_xonly_pubkeys; i++) {
+        secp256k1_xonly_pubkey_load(ctx, &addend, &xonly_pubkeys[i]);
+        secp256k1_gej_add_ge(&A_sum_gej, &A_sum_gej, &addend);
+    }
+    if (secp256k1_gej_is_infinity(&A_sum_gej)) {
+        /* TODO: do we need a special error return code for this case? */
+        return 0;
+    }
+    secp256k1_ge_set_gej(&A_sum_ge, &A_sum_gej);
+
+    /* Compute input_hash = hash(outpoint_L || A_sum) */
+    secp256k1_silentpayments_calculate_input_hash(&input_hash_scalar, outpoint_smallest36, &A_sum_ge);
+
+    /* Compute A_tweaked = A_sum * input_hash */
+    if (!secp256k1_eckey_pubkey_tweak_mul(&A_sum_ge, &input_hash_scalar)) {
+        return 0;
+    }
+    secp256k1_pubkey_save(public_tweak_data, &A_sum_ge);
+
+    return 1;
+}
+
 /* TODO: implement functions for receiver side. */
 
 #endif
