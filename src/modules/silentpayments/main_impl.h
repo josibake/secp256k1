@@ -320,4 +320,35 @@ int secp256k1_silentpayments_create_output_pubkey(const secp256k1_context *ctx, 
     return 1;
 }
 
+int secp256k1_silentpayments_create_output_seckey(const secp256k1_context *ctx, unsigned char *output_seckey, const unsigned char *shared_secret33, const unsigned char *receiver_spend_seckey, unsigned int k, const unsigned char *label_tweak32) {
+    secp256k1_scalar t_k_scalar;
+    secp256k1_scalar final_seckey;
+    int ret;
+
+    /* Sanity check inputs */
+    VERIFY_CHECK(ctx != NULL);
+    ARG_CHECK(output_seckey != NULL);
+    memset(output_seckey, 0, 32);
+    ARG_CHECK(shared_secret33 != NULL);
+    ARG_CHECK(receiver_spend_seckey != NULL);
+
+    /* Apply label tweak if provided */
+    ret = secp256k1_scalar_set_b32_seckey(&final_seckey, receiver_spend_seckey);
+    VERIFY_CHECK(ret);
+    (void)ret;
+    if (label_tweak32 != NULL) {
+        secp256k1_scalar tweak_scalar;
+        secp256k1_scalar_set_b32(&tweak_scalar, label_tweak32, NULL);
+        secp256k1_eckey_privkey_tweak_add(&final_seckey, &tweak_scalar);
+    }
+
+    /* Compute and return d = (b_m + t_k) mod n */
+    secp256k1_silentpayments_create_t_k(&t_k_scalar, shared_secret33, k);
+    secp256k1_eckey_privkey_tweak_add(&final_seckey, &t_k_scalar);
+    secp256k1_scalar_get_b32(output_seckey, &final_seckey);
+    secp256k1_scalar_clear(&final_seckey);
+
+    return 1;
+}
+
 #endif
