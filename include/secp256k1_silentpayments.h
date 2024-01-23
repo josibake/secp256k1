@@ -167,6 +167,29 @@ SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int secp256k1_silentpayments_create_l
     unsigned int m
 ) SECP256K1_ARG_NONNULL(1) SECP256K1_ARG_NONNULL(2) SECP256K1_ARG_NONNULL(3);
 
+/** Create Silent Payment labelled spend public key.
+ *
+ *  Given a recipient's spend public key B_spend and a label_tweak, calculate
+ *  the corresponding serialized labelled spend public key:
+ *
+ *  B_m = B_spend + label_tweak * G
+ *
+ *  The result is used by the receiver to create a Silent Payment address, consisting
+ *  of the serialized and concatenated scan public key and (labelled) spend public key each.
+ *
+ *  Returns: 1 if labelled spend public key creation was successful. 0 if an error occured.
+ *  Args:                  ctx: pointer to a context object
+ *  Out: l_addr_spend_pubkey33: pointer to the resulting labelled spend public key
+ *   In: receiver_spend_pubkey: pointer to the receiver's scan pubkey
+ *                 label_tweak: pointer to the the receiver's spend
+ */
+SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int secp256k1_silentpayments_create_address_spend_pubkey(
+    const secp256k1_context *ctx,
+    unsigned char *l_addr_spend_pubkey33,
+    const secp256k1_pubkey *receiver_spend_pubkey,
+    const unsigned char *label_tweak32
+) SECP256K1_ARG_NONNULL(1) SECP256K1_ARG_NONNULL(2) SECP256K1_ARG_NONNULL(3) SECP256K1_ARG_NONNULL(4);
+
 #ifdef __cplusplus
 }
 #endif

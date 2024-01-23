@@ -238,4 +238,29 @@ int secp256k1_silentpayments_create_label_tweak(const secp256k1_context *ctx, un
     return 1;
 }
 
+int secp256k1_silentpayments_create_address_spend_pubkey(const secp256k1_context *ctx, unsigned char *l_addr_spend_pubkey33, const secp256k1_pubkey *receiver_spend_pubkey, const unsigned char *label_tweak32) {
+    secp256k1_ge B_m;
+    size_t ser_size;
+    int ser_ret;
+
+    /* Sanity check inputs. */
+    VERIFY_CHECK(ctx != NULL);
+    VERIFY_CHECK(l_addr_spend_pubkey33 != NULL);
+    VERIFY_CHECK(receiver_spend_pubkey != NULL);
+    VERIFY_CHECK(label_tweak32 != NULL);
+
+    /* Calculate B_m = B_spend + label_tweak * G */
+    secp256k1_pubkey_load(ctx, &B_m, receiver_spend_pubkey);
+    if (!secp256k1_ec_pubkey_tweak_add_helper(&B_m, label_tweak32)) {
+        return 0;
+    }
+
+    /* Serialize B_m */
+    ser_ret = secp256k1_eckey_pubkey_serialize(&B_m, l_addr_spend_pubkey33, &ser_size, 1);
+    VERIFY_CHECK(ser_ret && ser_size == 33);
+    (void)ser_ret;
+
+    return 1;
+}
+
 #endif
