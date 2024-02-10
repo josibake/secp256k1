@@ -293,7 +293,7 @@ static void secp256k1_silentpayments_create_t_k(secp256k1_scalar *t_k_scalar, co
     secp256k1_scalar_set_b32(t_k_scalar, hash_ser, NULL);
 }
 
-int secp256k1_silentpayments_create_output_pubkey(const secp256k1_context *ctx, secp256k1_xonly_pubkey *output_xonly_pubkey, const unsigned char *shared_secret33, const secp256k1_pubkey *receiver_spend_pubkey, unsigned int k, const unsigned char *label_tweak32) {
+int secp256k1_silentpayments_sender_create_output_pubkey(const secp256k1_context *ctx, secp256k1_xonly_pubkey *output_xonly_pubkey, const unsigned char *shared_secret33, const secp256k1_pubkey *receiver_spend_pubkey, unsigned int k) {
     secp256k1_ge P_output;
     secp256k1_scalar t_k_scalar;
 
@@ -302,20 +302,63 @@ int secp256k1_silentpayments_create_output_pubkey(const secp256k1_context *ctx, 
     ARG_CHECK(output_xonly_pubkey != NULL);
     ARG_CHECK(receiver_spend_pubkey != NULL);
 
-    /* Apply label tweak if provided: B_m = B_spend + label_tweak * G */
-    secp256k1_pubkey_load(ctx, &P_output, receiver_spend_pubkey);
-    if (label_tweak32 != NULL) {
-        if (!secp256k1_ec_pubkey_tweak_add_helper(&P_output, label_tweak32)) {
-            return 0;
-        }
-    }
-
     /* Calculate and return P_output = B_m + t_k * G */
     secp256k1_silentpayments_create_t_k(&t_k_scalar, shared_secret33, k);
     if (!secp256k1_eckey_pubkey_tweak_add(&P_output, &t_k_scalar)) {
         return 0;
     }
     secp256k1_xonly_pubkey_save(output_xonly_pubkey, &P_output);
+
+    return 1;
+}
+
+int secp256k1_silentpayments_receiver_create_scanning_data(const secp256k1_context *ctx, secp256k1_silentpayments_scanning_data *scanning_data, const unsigned char *shared_secret33, const secp256k1_pubkey *receiver_spend_pubkey, const secp256k1_xonly_pubkey *tx_output, unsigned int k) {
+    secp256k1_ge P_output;
+    secp256k1_ge P_output_negated;
+    secp256k1_scalar t_k_scalar;
+    /* Set up the group element / jacobian variables we will need for calculating the labels */
+    secp256k1_ge tx_output_ge;
+    secp256k1_gej tx_output_j;
+    secp256k1_gej tx_output_j_negated;
+    secp256k1_ge label;
+    secp256k1_ge label_negated;
+    secp256k1_gej label_j;
+    secp256k1_gej label_j_negated;
+
+    /* Sanity check inputs */
+    VERIFY_CHECK(ctx != NULL);
+    ARG_CHECK(scanning_data != NULL);
+    ARG_CHECK(receiver_spend_pubkey != NULL);
+
+    /* Calculate and return P_output = B_m + t_k * G */
+    secp256k1_pubkey_load(ctx, &P_output, receiver_spend_pubkey);
+    secp256k1_silentpayments_create_t_k(&t_k_scalar, shared_secret33, k);
+    if (!secp256k1_eckey_pubkey_tweak_add(&P_output, &t_k_scalar)) {
+        return 0;
+    }
+
+    /* First, negate P_output so we can subtract it from the tx_output */
+    secp256k1_ge_neg(&P_output_negated, &P_output);
+ 
+    /* Convert tx_output to jacobian coordinates and create tx_output_negated */
+    secp256k1_xonly_pubkey_load(ctx, &tx_output_ge, tx_output);
+    secp256k1_gej_set_ge(&tx_output_j, &tx_output_ge);
+    secp256k1_gej_neg(&tx_output_j_negated, &tx_output_j);
+
+    /* Calculate the two possible labels we need to check */
+    /* label = tx_output + (-P_k); label_negated = -tx_output + (-P_k) */
+    secp256k1_gej_add_ge_var(&label_j, &tx_output_j, &P_output_negated, NULL);
+    secp256k1_gej_add_ge_var(&label_j_negated, &tx_output_j_negated, &P_output_negated, NULL);
+
+    /* Save the generated output pubkey and the shared secret tweak t_k */
+    secp256k1_scalar_get_b32(&scanning_data->t_k, &t_k_scalar);
+    secp256k1_xonly_pubkey_save(&scanning_data->output_xonly_pubkey, &P_output);
+ 
+    /* Save the generated labels */
+    secp256k1_ge_set_gej(&label, &label_j);
+    secp256k1_ge_set_gej(&label_negated, &label_j_negated);
+    secp256k1_pubkey_save(&scanning_data->label, &label);
+    secp256k1_pubkey_save(&scanning_data->label_negated, &label_negated);
 
     return 1;
 }

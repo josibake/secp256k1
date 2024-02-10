@@ -208,16 +208,30 @@ SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int secp256k1_silentpayments_create_a
  *       receiver_spend_pubkey: pointer to the receiver's spend pubkey
  *                           k: output counter (usually set to 0, should be increased for
  *                              every additional output to the same recipient)
- *               label_tweak32: an optional 32-byte label tweak (NULL if no label is used)
  */
-SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int secp256k1_silentpayments_create_output_pubkey(
+SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int secp256k1_silentpayments_sender_create_output_pubkey(
     const secp256k1_context *ctx,
     secp256k1_xonly_pubkey *output_xonly_pubkey,
     const unsigned char *shared_secret33,
     const secp256k1_pubkey *receiver_spend_pubkey,
-    unsigned int k,
-    const unsigned char *label_tweak32
+    unsigned int k
 ) SECP256K1_ARG_NONNULL(1) SECP256K1_ARG_NONNULL(2) SECP256K1_ARG_NONNULL(3) SECP256K1_ARG_NONNULL(4);
+
+typedef struct {
+    unsigned char t_k;
+    secp256k1_xonly_pubkey output_xonly_pubkey;
+    secp256k1_pubkey label;
+    secp256k1_pubkey label_negated;
+} secp256k1_silentpayments_scanning_data;
+
+SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int secp256k1_silentpayments_receiver_create_scanning_data(
+    const secp256k1_context *ctx,
+    secp256k1_silentpayments_scanning_data *scanning_data,
+    const unsigned char *shared_secret33,
+    const secp256k1_pubkey *receiver_spend_pubkey,
+    const secp256k1_xonly_pubkey *tx_output,
+    unsigned int k
+) SECP256K1_ARG_NONNULL(1) SECP256K1_ARG_NONNULL(2) SECP256K1_ARG_NONNULL(3) SECP256K1_ARG_NONNULL(4) SECP256K1_ARG_NONNULL(5);
 
 /** Create Silent Payment output private key (for spending receiver's funds).
  *

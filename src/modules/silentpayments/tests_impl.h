@@ -90,8 +90,8 @@ void run_silentpayments_tests(void) {
     CHECK(secp256k1_memcmp_var(shared_secret_sender, shared_secret_receiver, 33) == 0);
 
     /* check that calculated silent payments output matches */
-    CHECK(secp256k1_silentpayments_create_output_pubkey(CTX, &output_calculated_xonly_obj,
-        shared_secret_sender, &receiver_spend_pubkey_obj, 0, NULL));
+    CHECK(secp256k1_silentpayments_sender_create_output_pubkey(CTX, &output_calculated_xonly_obj,
+        shared_secret_sender, &receiver_spend_pubkey_obj, 0));
     CHECK(secp256k1_xonly_pubkey_serialize(CTX, output_calculated, &output_calculated_xonly_obj));
     CHECK(secp256k1_memcmp_var(output_calculated, output_expected, 32) == 0);
 
