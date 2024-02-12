@@ -243,6 +243,56 @@ SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int secp256k1_silentpayments_create_a
     const secp256k1_pubkey *label
 ) SECP256K1_ARG_NONNULL(1) SECP256K1_ARG_NONNULL(2) SECP256K1_ARG_NONNULL(3) SECP256K1_ARG_NONNULL(4);
 
+typedef struct {
+    secp256k1_pubkey label;
+    secp256k1_pubkey label_negated;
+} secp256k1_silentpayments_label_data;
+
+/** Scan for Silent Payment transaction outputs.
+ *
+ *  Given a shared_secret, a recipient's spend public key B_spend, and the relevant transaction
+ *  outputs, scan for outputs belong to the recipient and return the tweak(s) needed for spending
+ *  the output(s). An optional label_lookup callback function and label_context can be passed if the
+ *  recipient uses labels. This allows for checking if a label exists in the recipients label cache
+ *  and retrieving the label tweak.
+ *
+ *  Returns: 1 if output scanning was successful. 0 if an error occured.
+ *  Args:             ctx: pointer to a context object
+ *  Out:    found_outputs: pointer to an array of pointers to found output objects. The found outputs
+ *                         array MUST be initialized to be the same length as the tx_outputs array
+ *        n_found_outputs: pointer to an integer indicating the final size of the found outputs array.
+ *                         This number represents the number of outputs found while scanning (0 if
+ *                         none are found)
+ *  In:   shared_secret33: shared secret, derived from either sender's
+ *                         or receiver's perspective with routines from above
+ *  receiver_spend_pubkey: pointer to the receiver's spend pubkey
+ *             tx_outputs: pointer to the tx's x-only public key outputs
+ *           n_tx_outputs: the number of tx_outputs being scanned
+ *           label_lookup: pointer to a callback function for looking up a label value. This fucntion
+ *                         takes a label pubkey as an argument and returns a pointer to the label tweak
+ *                         if the label exists, otherwise returns a nullptr (NULL if labels are not used)
+ *          label_context: pointer to a label context object (NULL if labels are not used)
+ */
+
+typedef const unsigned char* (*secp256k1_silentpayments_label_lookup)(const secp256k1_pubkey*, const void*);
+typedef struct {
+    const secp256k1_xonly_pubkey *output;
+    secp256k1_pubkey label;
+    unsigned char tweak[32];
+} secp256k1_silentpayments_found_output;
+
+SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int secp256k1_silentpayments_receiver_scan_outputs(
+    const secp256k1_context *ctx,
+    secp256k1_silentpayments_found_output **found_outputs,
+    size_t *n_found_outputs,
+    const unsigned char *shared_secret33,
+    const secp256k1_pubkey *receiver_spend_pubkey,
+    const secp256k1_xonly_pubkey * const *tx_outputs,
+    size_t n_tx_outputs,
+    secp256k1_silentpayments_label_lookup label_lookup,
+    const void *label_context
+) SECP256K1_ARG_NONNULL(1) SECP256K1_ARG_NONNULL(2) SECP256K1_ARG_NONNULL(4) SECP256K1_ARG_NONNULL(5) SECP256K1_ARG_NONNULL(6);
+
 #ifdef __cplusplus
 }
 #endif
