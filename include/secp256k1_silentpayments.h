@@ -2,6 +2,7 @@
 #define SECP256K1_SILENTPAYMENTS_H
 
 #include "secp256k1.h"
+#include "secp256k1_extrakeys.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -27,6 +28,18 @@ extern "C" {
  * implementation without the need for any further manual elliptic-curve
  * operations.
  */
+
+/* This struct serves as an In/Out param for the sender.
+ * The recipient's silent payment addresses is passed in for generating the taproot outputs.
+ * The generated outputs are saved in the `generated_outputs` array. This ensures the caller
+ * is able to match up the generated outputs to the correct recpient (e.g. to be able to assign
+ * the correct amounts to the correct outputs in the final transaction).
+ */
+typedef struct {
+    secp256k1_pubkey scan_pubkey;
+    secp256k1_pubkey spend_pubkey;
+    secp256k1_xonly_pubkey generated_output;
+} secp256k1_silentpayments_recipient;
 
 /* TODO: add function API for sender side. */
 
