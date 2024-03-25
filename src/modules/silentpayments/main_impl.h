@@ -258,6 +258,68 @@ int secp256k1_silentpayments_sender_create_outputs(const secp256k1_context *ctx,
     return 1;
 }
 
+int secp256k1_silentpayments_recipient_compute_public_data(
+    const secp256k1_context *ctx,
+    secp256k1_pubkey *A_sum,
+    unsigned char *input_hash,
+    const unsigned char *outpoint_smallest36,
+    const secp256k1_xonly_pubkey * const *xonly_pubkeys,
+    size_t n_xonly_pubkeys,
+    const secp256k1_pubkey * const *plain_pubkeys,
+    size_t n_plain_pubkeys
+) {
+    size_t i;
+    secp256k1_ge A_sum_ge, addend;
+    secp256k1_gej A_sum_gej;
+    unsigned char input_hash_local[32];
+
+    /* Sanity check inputs */
+    VERIFY_CHECK(ctx != NULL);
+    ARG_CHECK(A_sum != NULL);
+    ARG_CHECK(plain_pubkeys == NULL || n_plain_pubkeys >= 1);
+    ARG_CHECK(xonly_pubkeys == NULL || n_xonly_pubkeys >= 1);
+    ARG_CHECK((plain_pubkeys != NULL) || (xonly_pubkeys != NULL));
+    ARG_CHECK((n_plain_pubkeys + n_xonly_pubkeys) >= 1);
+    ARG_CHECK(outpoint_smallest36 != NULL);
+    /* If the caller does not provide a pointer for input_hash, we interpret this as them requesting input hash be included
+     * with the returned A_sum, i.e. A_sum_tweaked = input_hash * A_sum */
+    if (input_hash != NULL) {
+        memset(input_hash, 0, 32);
+    } else {
+        memset(input_hash_local, 0, 32);
+    }
+
+    /* Compute input public keys sum: A_sum = A_1 + A_2 + ... + A_n */
+    secp256k1_gej_set_infinity(&A_sum_gej);
+    for (i = 0; i < n_plain_pubkeys; i++) {
+        secp256k1_pubkey_load(ctx, &addend, plain_pubkeys[i]);
+        secp256k1_gej_add_ge(&A_sum_gej, &A_sum_gej, &addend);
+    }
+    for (i = 0; i < n_xonly_pubkeys; i++) {
+        secp256k1_xonly_pubkey_load(ctx, &addend, xonly_pubkeys[i]);
+        secp256k1_gej_add_ge(&A_sum_gej, &A_sum_gej, &addend);
+    }
+    if (secp256k1_gej_is_infinity(&A_sum_gej)) {
+        /* TODO: do we need a special error return code for this case? */
+        return 0;
+    }
+    secp256k1_ge_set_gej(&A_sum_ge, &A_sum_gej);
+
+    /* Compute input_hash = hash(outpoint_L || A_sum) */
+    if (input_hash != NULL) {
+        secp256k1_silentpayments_calculate_input_hash(input_hash, outpoint_smallest36, &A_sum_ge);
+        secp256k1_pubkey_save(A_sum, &A_sum_ge);
+    } else {
+        secp256k1_silentpayments_calculate_input_hash(input_hash_local, outpoint_smallest36, &A_sum_ge);
+        secp256k1_pubkey_save(A_sum, &A_sum_ge);
+        if (!secp256k1_ec_pubkey_tweak_mul(ctx, A_sum, input_hash_local)) {
+            return 0;
+        }
+    }
+
+    return 1;
+}
+
 /* TODO: implement functions for receiver side. */
 
 #endif

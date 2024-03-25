@@ -93,6 +93,50 @@ SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int secp256k1_silentpayments_sender_c
     size_t n_plain_seckeys
 ) SECP256K1_ARG_NONNULL(1) SECP256K1_ARG_NONNULL(2) SECP256K1_ARG_NONNULL(3) SECP256K1_ARG_NONNULL(5);
 
+/** Compute Silent Payment public data from input public keys and transaction inputs.
+ *
+ * Given a list of n public keys A_1...A_n (one for each silent payment
+ * eligible input to spend) and a serialized outpoint_smallest, compute
+ * the corresponding input public tweak data:
+ *
+ * A_sum = A_1 + A_2 + ... + A_n
+ * input_hash = hash(outpoint_lowest || A_sum)
+ *
+ * The public keys have to be passed in via two different parameter pairs,
+ * one for regular and one for x-only public keys, in order to avoid the need
+ * of users converting to a common pubkey format before calling this function.
+ * The resulting data is can be used for scanning on the recipient side, or stored
+ * in an index for late use (e.g. wallet rescanning, vending data to light clients).
+ *
+ * If calling this function for scanning, the reciever must provide an output param
+ * for the `input_hash`. If calling this function for simply aggregating the inputs
+ * for later use, the caller should pass NULL for `input_hash` to have the `input_hash` scalar
+ * multipled in with the return `A_sum` pubkey.
+ *
+ *  Returns: 1 if tweak data creation was successful. 0 if an error occured.
+ *  Args:                  ctx: pointer to a context object
+ *  Out:                 A_sum: pointer to the resulting public keys sum
+ *                  input_hash: pointer to the resulting 32-byte input hash. If null, input_hash
+ *                              is included with A_sum, i.e. A_sum_tweaked = A_sum * input_hash
+ *  In:          plain_pubkeys: pointer to an array of pointers to non-taproot
+ *                              public keys (can be NULL if no non-taproot inputs are used)
+ *             n_plain_pubkeys: the number of non-taproot input public keys
+ *               xonly_pubkeys: pointer to an array of pointers to taproot x-only
+ *                              public keys (can be NULL if no taproot inputs are used)
+ *             n_xonly_pubkeys: the number of taproot input public keys
+ *         outpoint_smallest36: serialized smallest outpoint
+ */
+SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int secp256k1_silentpayments_recipient_compute_public_data(
+    const secp256k1_context *ctx,
+    secp256k1_pubkey *A_sum,
+    unsigned char *input_hash,
+    const unsigned char *outpoint_smallest36,
+    const secp256k1_xonly_pubkey * const *xonly_pubkeys,
+    size_t n_xonly_pubkeys,
+    const secp256k1_pubkey * const *plain_pubkeys,
+    size_t n_plain_pubkeys
+) SECP256K1_ARG_NONNULL(1) SECP256K1_ARG_NONNULL(2) SECP256K1_ARG_NONNULL(4);
+
 #ifdef __cplusplus
 }
 #endif
