@@ -102,8 +102,135 @@ static unsigned char AUX32[32] = {
     0x07,0xa2,0x15,0xf4,0x0b,0x0a,0x3e,0xcc
 };
 
+static void test_recipient_sort_helper(unsigned char (*sp_addresses[3])[2][33], unsigned char (*sp_outputs[3])[32]) {
+    unsigned char const *seckey_ptrs[1];
+    secp256k1_silentpayments_recipient recipients[3];
+    const secp256k1_silentpayments_recipient *recipient_ptrs[3];
+    secp256k1_xonly_pubkey generated_outputs[3];
+    secp256k1_xonly_pubkey *generated_output_ptrs[3];
+    unsigned char xonly_ser[32];
+    size_t i;
+    int ret;
+
+    seckey_ptrs[0] = ALICE_SECKEY;
+    for (i = 0; i < 3; i++) {
+        CHECK(secp256k1_ec_pubkey_parse(CTX, &recipients[i].scan_pubkey, (*sp_addresses[i])[0], 33));
+        CHECK(secp256k1_ec_pubkey_parse(CTX, &recipients[i].spend_pubkey,(*sp_addresses[i])[1], 33));
+        recipients[i].index = i;
+        recipient_ptrs[i] = &recipients[i];
+        generated_output_ptrs[i] = &generated_outputs[i];
+    }
+    ret = secp256k1_silentpayments_sender_create_outputs(CTX,
+        generated_output_ptrs,
+        recipient_ptrs, 3,
+        SMALLEST_OUTPOINT,
+        NULL, 0,
+        seckey_ptrs, 1
+    );
+    CHECK(ret);
+    for (i = 0; i < 3; i++) {
+        secp256k1_xonly_pubkey_serialize(CTX, xonly_ser, &generated_outputs[i]);
+        CHECK(secp256k1_memcmp_var(xonly_ser, (*sp_outputs[i]), 32) == 0);
+    }
+}
+
+static void test_recipient_sort(void) {
+    unsigned char (*sp_addresses[3])[2][33];
+    unsigned char (*sp_outputs[3])[32];
+
+    /* With a fixed set of addresses and a fixed set of inputs,
+     * test that we always get the same outputs, regardless of the ordering
+     * of the recipients
+     */
+    sp_addresses[0] = &CAROL_ADDRESS;
+    sp_addresses[1] = &BOB_ADDRESS;
+    sp_addresses[2] = &CAROL_ADDRESS;
+
+    sp_outputs[0] = &CAROL_OUTPUT_ONE;
+    sp_outputs[1] = &BOB_OUTPUT;
+    sp_outputs[2] = &CAROL_OUTPUT_TWO;
+    test_recipient_sort_helper(sp_addresses, sp_outputs);
+
+    sp_addresses[0] = &CAROL_ADDRESS;
+    sp_addresses[1] = &CAROL_ADDRESS;
+    sp_addresses[2] = &BOB_ADDRESS;
+
+    sp_outputs[0] = &CAROL_OUTPUT_ONE;
+    sp_outputs[1] = &CAROL_OUTPUT_TWO;
+    sp_outputs[2] = &BOB_OUTPUT;
+    test_recipient_sort_helper(sp_addresses, sp_outputs);
+
+    sp_addresses[0] = &BOB_ADDRESS;
+    sp_addresses[1] = &CAROL_ADDRESS;
+    sp_addresses[2] = &CAROL_ADDRESS;
+
+    /* Note: in this case, the second output for Carol comes before the first.
+     * This is because heapsort is an unstable sorting algorithm, i.e., the ordering
+     * of identical elements is not guaranteed to be preserved
+     */
+    sp_outputs[0] = &BOB_OUTPUT;
+    sp_outputs[1] = &CAROL_OUTPUT_TWO;
+    sp_outputs[2] = &CAROL_OUTPUT_ONE;
+    test_recipient_sort_helper(sp_addresses, sp_outputs);
+}
+
+static void test_send_api(void) {
+    unsigned char (*sp_addresses[2])[2][33];
+    unsigned char const *p[1];
+    secp256k1_keypair const *t[1];
+    secp256k1_silentpayments_recipient r[2];
+    const secp256k1_silentpayments_recipient *rp[2];
+    secp256k1_xonly_pubkey o[2];
+    secp256k1_xonly_pubkey *op[2];
+    secp256k1_keypair taproot;
+    size_t i;
+
+    /* Set up Bob and Carol as the recipients */
+    sp_addresses[0] = &BOB_ADDRESS;
+    sp_addresses[1] = &CAROL_ADDRESS;
+    for (i = 0; i < 2; i++) {
+        CHECK(secp256k1_ec_pubkey_parse(CTX, &r[i].scan_pubkey, (*sp_addresses[i])[0], 33));
+        CHECK(secp256k1_ec_pubkey_parse(CTX, &r[i].spend_pubkey,(*sp_addresses[i])[1], 33));
+        /* Set the index value incorrectly */
+        r[i].index = 0;
+        rp[i] = &r[i];
+        op[i] = &o[i];
+    }
+    /* Set up a taproot key and a plain key for Alice */
+    CHECK(secp256k1_keypair_create(CTX, &taproot, ALICE_SECKEY));
+    t[0] = &taproot;
+    p[0] = ALICE_SECKEY;
+
+    /* Fails if the index is set incorrectly */
+    CHECK_ILLEGAL(CTX, secp256k1_silentpayments_sender_create_outputs(CTX, op, rp, 2, SMALLEST_OUTPOINT, NULL, 0, p, 1));
+
+    /* Set the index correctly for the next tests */
+    for (i = 0; i < 2; i++) {
+        r[i].index = i;
+    }
+    CHECK(secp256k1_silentpayments_sender_create_outputs(CTX, op, rp, 2, SMALLEST_OUTPOINT, NULL, 0, p, 1));
+
+    /* Check that null arguments are handled */
+    CHECK_ILLEGAL(CTX, secp256k1_silentpayments_sender_create_outputs(CTX, NULL, rp, 2, SMALLEST_OUTPOINT, t, 1, p, 1));
+    CHECK_ILLEGAL(CTX, secp256k1_silentpayments_sender_create_outputs(CTX, op, NULL, 2, SMALLEST_OUTPOINT, t, 1, p, 1));
+    CHECK_ILLEGAL(CTX, secp256k1_silentpayments_sender_create_outputs(CTX, op, rp, 2, NULL, t, 1, p, 1));
+    CHECK_ILLEGAL(CTX, secp256k1_silentpayments_sender_create_outputs(CTX, op, rp, 2, SMALLEST_OUTPOINT, NULL, 1, p, 1));
+    CHECK_ILLEGAL(CTX, secp256k1_silentpayments_sender_create_outputs(CTX, op, rp, 2, SMALLEST_OUTPOINT, t, 1, NULL, 1));
+
+    /* Check that array arguments are verified */
+    CHECK_ILLEGAL(CTX, secp256k1_silentpayments_sender_create_outputs(CTX, op, rp, 2, SMALLEST_OUTPOINT, NULL, 0, NULL, 0));
+    CHECK_ILLEGAL(CTX, secp256k1_silentpayments_sender_create_outputs(CTX, op, rp, 0, SMALLEST_OUTPOINT, NULL, 0, p, 1));
+    CHECK_ILLEGAL(CTX, secp256k1_silentpayments_sender_create_outputs(CTX, op, rp, 2, SMALLEST_OUTPOINT, t, 0, p, 1));
+    CHECK_ILLEGAL(CTX, secp256k1_silentpayments_sender_create_outputs(CTX, op, rp, 2, SMALLEST_OUTPOINT, t, 1, p, 0));
+
+    /* Create malformed keys for Alice by using a key that will overflow */
+    p[0] = ORDERC;
+    CHECK(secp256k1_silentpayments_sender_create_outputs(CTX, op, rp, 2, SMALLEST_OUTPOINT, NULL, 0, p, 1) == 0);
+}
+
 void run_silentpayments_tests(void) {
-    CHECK(1);
+    test_recipient_sort();
+    test_send_api();
 }
 
 #endif
