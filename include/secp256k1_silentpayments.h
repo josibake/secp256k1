@@ -2,6 +2,7 @@
 #define SECP256K1_SILENTPAYMENTS_H
 
 #include "secp256k1.h"
+#include "secp256k1_extrakeys.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -23,6 +24,21 @@ extern "C" {
  * using libsecp256k1, this API should provide all the functions needed for a Silent Payments
  * implementation without requiring any further elliptic-curve operations from the wallet.
  */
+
+/* This struct serves as an In param for passing the silent payment address data.
+ * The index field is for when more than address is being sent to in a transaction. Index is
+ * set based on the original ordering of the addresses and used to return the generated outputs
+ * matching the original ordering. This is necessary because when more than one recipient is used,
+ * the array will be sorted in place as part of generating the outputs. Order of the generated
+ * outputs matches the original ordering to ensure the caller is able to match up the generated
+ * outputs to the correct recpient (e.g. to be able to assign the correct amounts to the correct
+ * outputs in the final transaction).
+ */
+typedef struct {
+    secp256k1_pubkey scan_pubkey;
+    secp256k1_pubkey spend_pubkey;
+    size_t index;
+} secp256k1_silentpayments_recipient;
 
 #ifdef __cplusplus
 }
