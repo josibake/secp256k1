@@ -173,4 +173,90 @@ int secp256k1_silentpayments_create_output_pubkey(const secp256k1_context *ctx, 
     return 1;
 }
 
+int secp256k1_silentpayments_sender_create_outputs(
+    const secp256k1_context *ctx,
+    secp256k1_xonly_pubkey **generated_outputs,
+    const secp256k1_silentpayments_recipient **recipients,
+    size_t n_recipients,
+    const unsigned char *outpoint_smallest36,
+    const secp256k1_keypair * const *taproot_seckeys,
+    size_t n_taproot_seckeys,
+    const unsigned char * const *plain_seckeys,
+    size_t n_plain_seckeys
+) {
+    size_t i, k;
+    secp256k1_scalar a_sum_scalar, addend;
+    secp256k1_ge A_sum_ge;
+    secp256k1_gej A_sum_gej;
+    unsigned char input_hash[32];
+    unsigned char a_sum[32];
+    unsigned char shared_secret[33];
+    secp256k1_silentpayments_recipient last_recipient;
+
+    /* Sanity check inputs. */
+    VERIFY_CHECK(ctx != NULL);
+    ARG_CHECK(recipients != NULL);
+    ARG_CHECK(secp256k1_ecmult_gen_context_is_built(&ctx->ecmult_gen_ctx));
+    ARG_CHECK(plain_seckeys == NULL || n_plain_seckeys >= 1);
+    ARG_CHECK(taproot_seckeys == NULL || n_taproot_seckeys >= 1);
+    ARG_CHECK((plain_seckeys != NULL) || (taproot_seckeys != NULL));
+    ARG_CHECK((n_plain_seckeys + n_taproot_seckeys) >= 1);
+    ARG_CHECK(outpoint_smallest36 != NULL);
+    /* ensure the index field is set correctly */
+    for (i = 0; i < n_recipients; i++) {
+        ARG_CHECK(recipients[i]->index == i);
+    }
+
+    /* Compute input private keys sum: a_sum = a_1 + a_2 + ... + a_n */
+    a_sum_scalar = secp256k1_scalar_zero;
+    for (i = 0; i < n_plain_seckeys; i++) {
+        if (!secp256k1_scalar_set_b32_seckey(&addend, plain_seckeys[i])) {
+            return 0;
+        }
+        secp256k1_scalar_add(&a_sum_scalar, &a_sum_scalar, &addend);
+        VERIFY_CHECK(!secp256k1_scalar_is_zero(&a_sum_scalar));
+    }
+    /* private keys used for taproot outputs have to be negated if they resulted in an odd point */
+    for (i = 0; i < n_taproot_seckeys; i++) {
+        secp256k1_ge addend_point;
+        if (!secp256k1_keypair_load(ctx, &addend, &addend_point, taproot_seckeys[i])) {
+            return 0;
+        }
+        if (secp256k1_fe_is_odd(&addend_point.y)) {
+            secp256k1_scalar_negate(&addend, &addend);
+        }
+
+        secp256k1_scalar_add(&a_sum_scalar, &a_sum_scalar, &addend);
+        VERIFY_CHECK(!secp256k1_scalar_is_zero(&a_sum_scalar));
+    }
+    if (secp256k1_scalar_is_zero(&a_sum_scalar)) {
+        /* TODO: do we need a special error return code for this case? */
+        return 0;
+    }
+    secp256k1_scalar_get_b32(a_sum, &a_sum_scalar);
+
+    /* Compute input_hash = hash(outpoint_L || (a_sum * G)) */
+    secp256k1_ecmult_gen(&ctx->ecmult_gen_ctx, &A_sum_gej, &a_sum_scalar);
+    secp256k1_ge_set_gej(&A_sum_ge, &A_sum_gej);
+    secp256k1_silentpayments_calculate_input_hash(input_hash, outpoint_smallest36, &A_sum_ge);
+    secp256k1_silentpayments_recipient_sort(ctx, recipients, n_recipients);
+    last_recipient = *recipients[0];
+    k = 0;
+    for (i = 0; i < n_recipients; i++) {
+        if ((secp256k1_ec_pubkey_cmp(ctx, &last_recipient.scan_pubkey, &recipients[i]->scan_pubkey) != 0) || (i == 0)) {
+            /* if we are on a different scan pubkey, its time to recreate the the shared secret and reset k to 0 */
+            if (!secp256k1_silentpayments_create_shared_secret(ctx, shared_secret, a_sum, &recipients[i]->scan_pubkey, input_hash)) {
+                return 0;
+            }
+            k = 0;
+        }
+        if (!secp256k1_silentpayments_create_output_pubkey(ctx, generated_outputs[recipients[i]->index], shared_secret, &recipients[i]->spend_pubkey, k)) {
+            return 0;
+        }
+        k++;
+        last_recipient = *recipients[i];
+    }
+    return 1;
+}
+
 #endif
