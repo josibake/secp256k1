@@ -100,6 +100,9 @@ static int secp256k1_silentpayments_ecdh_return_pubkey(unsigned char *output, co
 
 int secp256k1_silentpayments_create_shared_secret(const secp256k1_context *ctx, unsigned char *shared_secret33, const secp256k1_pubkey *public_component, const unsigned char *secret_component, const unsigned char *input_hash) {
     unsigned char tweaked_secret_component[32];
+    secp256k1_pubkey ecdhSecretPubKey; /*will be ecdh after multiplication*/
+    size_t out_size = 33;
+    ecdhSecretPubKey = *public_component;
 
     /* Sanity check inputs */
     ARG_CHECK(shared_secret33 != NULL);
@@ -116,7 +119,11 @@ int secp256k1_silentpayments_create_shared_secret(const secp256k1_context *ctx, 
     }
 
     /* Compute shared_secret = tweaked_secret_component * Public_component */
-    if (!secp256k1_ecdh(ctx, shared_secret33, public_component, tweaked_secret_component, secp256k1_silentpayments_ecdh_return_pubkey, NULL)) {
+    if (!secp256k1_ec_pubkey_tweak_mul(ctx, &ecdhSecretPubKey, tweaked_secret_component)) {
+        return 0;
+    }
+
+    if (!secp256k1_ec_pubkey_serialize(ctx, shared_secret33, &out_size, &ecdhSecretPubKey, SECP256K1_EC_COMPRESSED)) {
         return 0;
     }
 
