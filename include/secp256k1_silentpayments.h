@@ -85,6 +85,14 @@ SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int secp256k1_silentpayments_create_s
     const unsigned char *input_hash
 ) SECP256K1_ARG_NONNULL(1) SECP256K1_ARG_NONNULL(2) SECP256K1_ARG_NONNULL(3) SECP256K1_ARG_NONNULL(4);
 
+SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int secp256k1_silentpayments_create_shared_secret_const_time(
+    const secp256k1_context *ctx,
+    unsigned char *shared_secret33,
+    const secp256k1_pubkey *public_component,
+    const unsigned char *secret_component,
+    const unsigned char *input_hash
+) SECP256K1_ARG_NONNULL(1) SECP256K1_ARG_NONNULL(2) SECP256K1_ARG_NONNULL(3) SECP256K1_ARG_NONNULL(4);
+
 /** Create Silent Payment output public key.
  *
  *  Given a shared_secret, a public key B_spend, and an output counter k,

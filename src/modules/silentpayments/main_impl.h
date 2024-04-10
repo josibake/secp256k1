@@ -100,7 +100,7 @@ static int secp256k1_silentpayments_ecdh_return_pubkey(unsigned char *output, co
 
 int secp256k1_silentpayments_create_shared_secret(const secp256k1_context *ctx, unsigned char *shared_secret33, const secp256k1_pubkey *public_component, const unsigned char *secret_component, const unsigned char *input_hash) {
     unsigned char tweaked_secret_component[32];
-    secp256k1_pubkey ecdhSecretPubKey; /*will be ecdh after multiplication*/
+    secp256k1_pubkey ecdhSecretPubKey;
     size_t out_size = 33;
     ecdhSecretPubKey = *public_component;
 
@@ -124,6 +124,31 @@ int secp256k1_silentpayments_create_shared_secret(const secp256k1_context *ctx, 
     }
 
     if (!secp256k1_ec_pubkey_serialize(ctx, shared_secret33, &out_size, &ecdhSecretPubKey, SECP256K1_EC_COMPRESSED)) {
+        return 0;
+    }
+
+    return 1;
+}
+
+int secp256k1_silentpayments_create_shared_secret_const_time(const secp256k1_context *ctx, unsigned char *shared_secret33, const secp256k1_pubkey *public_component, const unsigned char *secret_component, const unsigned char *input_hash) {
+    unsigned char tweaked_secret_component[32];
+
+    /* Sanity check inputs */
+    ARG_CHECK(shared_secret33 != NULL);
+    memset(shared_secret33, 0, 33);
+    ARG_CHECK(public_component != NULL);
+    ARG_CHECK(secret_component != NULL);
+
+    /* Tweak secret component with input hash, if available */
+    memcpy(tweaked_secret_component, secret_component, 32);
+    if (input_hash != NULL) {
+        if (!secp256k1_ec_seckey_tweak_mul(ctx, tweaked_secret_component, input_hash)) {
+            return 0;
+        }
+    }
+
+    /* Compute shared_secret = tweaked_secret_component * Public_component */
+    if (!secp256k1_ecdh(ctx, shared_secret33, public_component, tweaked_secret_component, secp256k1_silentpayments_ecdh_return_pubkey, NULL)) {
         return 0;
     }
 
