@@ -123,6 +123,17 @@ int secp256k1_silentpayments_create_shared_secret(const secp256k1_context *ctx, 
     return 1;
 }
 
+int secp256k1_silentpayments_recipient_create_shared_secret(const secp256k1_context *ctx, unsigned char *shared_secret33, const unsigned char *recipient_scan_key, const secp256k1_pubkey *public_data) {
+
+    /* Sanity check inputs */
+    ARG_CHECK(shared_secret33 != NULL);
+    ARG_CHECK(recipient_scan_key != NULL);
+    ARG_CHECK(public_data != NULL);
+
+    return secp256k1_silentpayments_create_shared_secret(ctx, shared_secret33, public_data, recipient_scan_key, NULL);
+}
+
+
 /** Set hash state to the BIP340 tagged hash midstate for "BIP0352/SharedSecret". */
 static void secp256k1_silentpayments_sha256_init_sharedsecret(secp256k1_sha256* hash) {
     secp256k1_sha256_initialize(hash);
@@ -171,6 +182,11 @@ int secp256k1_silentpayments_create_output_pubkey(const secp256k1_context *ctx, 
     secp256k1_xonly_pubkey_save(P_output_xonly, &P_output_ge);
 
     return 1;
+}
+
+int secp256k1_silentpayments_recipient_create_output_pubkey(const secp256k1_context *ctx, secp256k1_xonly_pubkey *P_output_xonly, const unsigned char *shared_secret33, const secp256k1_pubkey *receiver_spend_pubkey, unsigned int k)
+{
+    return secp256k1_silentpayments_create_output_pubkey(ctx, P_output_xonly, shared_secret33, receiver_spend_pubkey, k);
 }
 
 int secp256k1_silentpayments_sender_create_outputs(const secp256k1_context *ctx, secp256k1_xonly_pubkey **generated_outputs, const secp256k1_silentpayments_recipient **recipients, size_t n_recipients,
