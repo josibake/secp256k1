@@ -560,4 +560,23 @@ int secp256k1_silentpayments_recipient_scan_outputs(
     return 1;
 }
 
+int secp256k1_silentpayments_recipient_create_shared_secret(const secp256k1_context *ctx, unsigned char *shared_secret33, const unsigned char *recipient_scan_key, const secp256k1_silentpayments_public_data *public_data) {
+    secp256k1_pubkey A_tweaked;
+    /* Sanity check inputs */
+    ARG_CHECK(shared_secret33 != NULL);
+    ARG_CHECK(recipient_scan_key != NULL);
+    ARG_CHECK(public_data != NULL);
+    ARG_CHECK(public_data->data[0] == 1);
+    if (!secp256k1_silentpayments_recipient_public_data_load(ctx, &A_tweaked, NULL, public_data)) {
+        return 0;
+    }
+    return secp256k1_silentpayments_create_shared_secret(ctx, shared_secret33, recipient_scan_key, &A_tweaked, NULL);
+}
+
+int secp256k1_silentpayments_recipient_create_output_pubkey(const secp256k1_context *ctx, secp256k1_xonly_pubkey *P_output_xonly, const unsigned char *shared_secret33, const secp256k1_pubkey *recipient_spend_pubkey, unsigned int k)
+{
+    return secp256k1_silentpayments_create_output_pubkey(ctx, P_output_xonly, shared_secret33, recipient_spend_pubkey, k);
+}
+
+
 #endif
