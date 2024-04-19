@@ -272,6 +272,58 @@ SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int secp256k1_silentpayments_recipien
 ) SECP256K1_ARG_NONNULL(1) SECP256K1_ARG_NONNULL(2) SECP256K1_ARG_NONNULL(3) SECP256K1_ARG_NONNULL(4)
     SECP256K1_ARG_NONNULL(6) SECP256K1_ARG_NONNULL(7) SECP256K1_ARG_NONNULL(8);
 
+/** Create Silent Payment shared secret.
+ *
+ * Given the public input data (A_tweaked = input_hash * A_sum), calculate the shared secret using ECDH:
+ *
+ * shared_secret = b_scan * A_tweaked   [Recipient, Light client scenario]
+ *
+ * The resulting shared secret is needed as input for creating silent payments
+ * outputs belonging to the same recipient scan public key.
+ *
+ *  Returns: 1 if shared secret creation was successful. 0 if an error occured.
+ *  Args:                  ctx: pointer to a context object
+ *  Out:       shared_secret33: pointer to the resulting 33-byte shared secret
+ *  In:     recipient_scan_key: pointer to the recipient's scan key
+ *                 public_data: pointer to the input public key sum, tweaked with the input_hash
+ *                              (see `_recipient_compute_public_data`)
+ */
+SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int secp256k1_silentpayments_recipient_create_shared_secret(
+    const secp256k1_context *ctx,
+    unsigned char *shared_secret33,
+    const unsigned char *recipient_scan_key,
+    const secp256k1_silentpayments_public_data *public_data
+) SECP256K1_ARG_NONNULL(1) SECP256K1_ARG_NONNULL(2) SECP256K1_ARG_NONNULL(3) SECP256K1_ARG_NONNULL(4);
+
+/** Create Silent Payment output public key.
+ *
+ *  Given a shared_secret, a public key B_spend, and an output counter k,
+ *  calculate the corresponding output public key:
+ *
+ *  P_output_xonly = B_spend + hash(shared_secret || ser_32(k)) * G
+ *
+ *  This function is used by the recipient when scanning for outputs without access to the
+ *  transaction outputs (e.g. using BIP158 block filters).
+ *  When scanning with this function, it is the scanners responsibility to determine if the generated
+ *  output exists in a block before proceeding to the next value of `k`.
+ *
+ *  Returns: 1 if output creation was successful. 0 if an error occured.
+ *  Args:               ctx: pointer to a context object
+ *  Out:     P_output_xonly: pointer to the resulting output x-only pubkey
+ *  In:     shared_secret33: shared secret, derived from either sender's
+ *                           or recipient's perspective with routines from above
+ *   recipient_spend_pubkey: pointer to the recipient's spend pubkey (labelled or unlabelled)
+ *                        k: output counter (initially set to 0, must be incremented for each
+ *                           additional output created or after each output found when scanning)
+ */
+SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int secp256k1_silentpayments_recipient_create_output_pubkey(
+    const secp256k1_context *ctx,
+    secp256k1_xonly_pubkey *P_output_xonly,
+    const unsigned char *shared_secret33,
+    const secp256k1_pubkey *recipient_spend_pubkey,
+    unsigned int k
+) SECP256K1_ARG_NONNULL(1) SECP256K1_ARG_NONNULL(2) SECP256K1_ARG_NONNULL(3) SECP256K1_ARG_NONNULL(4);
+
 #ifdef __cplusplus
 }
 #endif
