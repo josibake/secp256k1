@@ -321,4 +321,114 @@ int secp256k1_silentpayments_recipient_create_labelled_spend_pubkey(const secp25
     return 1;
 }
 
+int secp256k1_silentpayments_recipient_public_data_create(
+    const secp256k1_context *ctx,
+    secp256k1_silentpayments_public_data *public_data,
+    const unsigned char *outpoint_smallest36,
+    const secp256k1_xonly_pubkey * const *xonly_pubkeys,
+    size_t n_xonly_pubkeys,
+    const secp256k1_pubkey * const *plain_pubkeys,
+    size_t n_plain_pubkeys
+) {
+    size_t i;
+    size_t pubkeylen = 65;
+    secp256k1_pubkey A_sum;
+    secp256k1_ge A_sum_ge, addend;
+    secp256k1_gej A_sum_gej;
+    unsigned char input_hash_local[32];
+
+    /* Sanity check inputs */
+    VERIFY_CHECK(ctx != NULL);
+    ARG_CHECK(public_data != NULL);
+    ARG_CHECK(plain_pubkeys == NULL || n_plain_pubkeys >= 1);
+    ARG_CHECK(xonly_pubkeys == NULL || n_xonly_pubkeys >= 1);
+    ARG_CHECK((plain_pubkeys != NULL) || (xonly_pubkeys != NULL));
+    ARG_CHECK((n_plain_pubkeys + n_xonly_pubkeys) >= 1);
+    ARG_CHECK(outpoint_smallest36 != NULL);
+    memset(input_hash_local, 0, 32);
+
+    /* Compute input public keys sum: A_sum = A_1 + A_2 + ... + A_n */
+    secp256k1_gej_set_infinity(&A_sum_gej);
+    for (i = 0; i < n_plain_pubkeys; i++) {
+        if (!secp256k1_pubkey_load(ctx, &addend, plain_pubkeys[i])) {
+            return 0;
+        }
+        secp256k1_gej_add_ge_var(&A_sum_gej, &A_sum_gej, &addend, NULL);
+    }
+    for (i = 0; i < n_xonly_pubkeys; i++) {
+        if (!secp256k1_xonly_pubkey_load(ctx, &addend, xonly_pubkeys[i])) {
+            return 0;
+        }
+        secp256k1_gej_add_ge_var(&A_sum_gej, &A_sum_gej, &addend, NULL);
+    }
+    /* If the caller passes in all valid public keys but the public keys
+     * sum to 0 (the point at infinity), we can't do anything except tell
+     * the caller to try again with a different set of input public keys,
+     * e.g. skip the current transaction and move to the next */
+    ARG_CHECK(secp256k1_gej_is_infinity(&A_sum_gej) == 0);
+    secp256k1_ge_set_gej(&A_sum_ge, &A_sum_gej);
+
+    /* Compute input_hash = hash(outpoint_L || A_sum) */
+    secp256k1_silentpayments_calculate_input_hash(input_hash_local, outpoint_smallest36, &A_sum_ge);
+    secp256k1_pubkey_save(&A_sum, &A_sum_ge);
+    /* serialize the public_data struct */
+    public_data->data[0] = 0;
+    secp256k1_ec_pubkey_serialize(ctx, &public_data->data[1], &pubkeylen, &A_sum, SECP256K1_EC_UNCOMPRESSED);
+    memcpy(&public_data->data[1 + pubkeylen], input_hash_local, 32);
+    return 1;
+}
+
+static int secp256k1_silentpayments_recipient_public_data_load(const secp256k1_context *ctx, secp256k1_pubkey *pubkey, unsigned char *input_hash, const secp256k1_silentpayments_public_data *public_data) {
+    int combined;
+    size_t pubkeylen = 65;
+    VERIFY_CHECK(ctx != NULL);
+    ARG_CHECK(pubkey != NULL);
+    ARG_CHECK(public_data != NULL);
+
+    combined = (int)public_data->data[0];
+    ARG_CHECK(combined == 0 || combined == 1);
+    if (combined) {
+        ARG_CHECK(combined == 1 && input_hash == NULL);
+    } else {
+        ARG_CHECK(combined == 0 && input_hash != NULL);
+        memcpy(input_hash, &public_data->data[1 + pubkeylen], 32);
+    }
+    if (!secp256k1_ec_pubkey_parse(ctx, pubkey, &public_data->data[1], pubkeylen)) {
+        return 0;
+    }
+    return 1;
+}
+
+int secp256k1_silentpayments_recipient_public_data_serialize(const secp256k1_context *ctx, unsigned char *output33, const secp256k1_silentpayments_public_data *public_data) {
+    secp256k1_pubkey pubkey;
+    unsigned char input_hash[32];
+    size_t pubkeylen = 33;
+
+    ARG_CHECK(public_data->data[0] == 0);
+    if (!secp256k1_silentpayments_recipient_public_data_load(ctx, &pubkey, input_hash, public_data)) {
+        return 0;
+    }
+    if (!secp256k1_ec_pubkey_tweak_mul(ctx, &pubkey, input_hash)) {
+        return 0;
+    }
+    secp256k1_ec_pubkey_serialize(ctx, output33, &pubkeylen, &pubkey, SECP256K1_EC_COMPRESSED);
+    return 1;
+}
+
+int secp256k1_silentpayments_recipient_public_data_parse(const secp256k1_context *ctx, secp256k1_silentpayments_public_data *public_data, const unsigned char *input33) {
+    size_t inputlen = 33;
+    size_t pubkeylen = 65;
+    secp256k1_pubkey pubkey;
+
+    ARG_CHECK(public_data != NULL);
+    ARG_CHECK(input33 != NULL);
+    if (!secp256k1_ec_pubkey_parse(ctx, &pubkey, input33, inputlen)) {
+        return 0;
+    }
+    public_data->data[0] = 1;
+    secp256k1_ec_pubkey_serialize(ctx, &public_data->data[1], &pubkeylen, &pubkey, SECP256K1_EC_UNCOMPRESSED);
+    memset(&public_data->data[1 + pubkeylen], 0, 32);
+    return 1;
+}
+
 #endif

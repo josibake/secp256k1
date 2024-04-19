@@ -139,6 +139,139 @@ SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int secp256k1_silentpayments_recipien
     const secp256k1_pubkey *label
 ) SECP256K1_ARG_NONNULL(1) SECP256K1_ARG_NONNULL(2) SECP256K1_ARG_NONNULL(3) SECP256K1_ARG_NONNULL(4);
 
+/** Opaque data structure that holds silent payments public input data.
+ *
+ *  This structure does not contain secret data. Guaranteed to be 98 bytes in size. It can be safely
+ *  copied/moved. Created with `secp256k1_silentpayments_public_data_create`. Can be serialized as
+ *  a compressed public key using `secp256k1_silentpayments_public_data_serialize`. The serialization
+ *  is intended for sending the public input data to light clients. Light clients can use this
+ *  serialization with `secp256k1_silentpayments_public_data_parse`.
+ */
+typedef struct {
+    unsigned char data[98];
+} secp256k1_silentpayments_public_data;
+
+/** Compute Silent Payment public data from input public keys and transaction inputs.
+ *
+ * Given a list of n public keys A_1...A_n (one for each silent payment
+ * eligible input to spend) and a serialized outpoint_smallest, compute
+ * the corresponding input public tweak data:
+ *
+ * A_sum = A_1 + A_2 + ... + A_n
+ * input_hash = hash(outpoint_lowest || A_sum)
+ *
+ * The public keys have to be passed in via two different parameter pairs,
+ * one for regular and one for x-only public keys, in order to avoid the need
+ * of users converting to a common pubkey format before calling this function.
+ * The resulting data is can be used for scanning on the recipient side, or stored
+ * in an index for late use (e.g. wallet rescanning, vending data to light clients).
+ *
+ * If calling this function for scanning, the reciever must provide an output param
+ * for the `input_hash`. If calling this function for simply aggregating the inputs
+ * for later use, the caller can save the result with `silentpayments_public_data_serialize`.
+ *
+ *  Returns: 1 if tweak data creation was successful. 0 if an error occured.
+ *  Args:                  ctx: pointer to a context object
+ *  Out:           public_data: pointer to public_data object containing the summed public key and
+ *                              input_hash.
+ *  In:    outpoint_smallest36: serialized smallest outpoint
+ *               xonly_pubkeys: pointer to an array of pointers to taproot x-only
+ *                              public keys (can be NULL if no taproot inputs are used)
+ *             n_xonly_pubkeys: the number of taproot input public keys
+ *               plain_pubkeys: pointer to an array of pointers to non-taproot
+ *                              public keys (can be NULL if no non-taproot inputs are used)
+ *             n_plain_pubkeys: the number of non-taproot input public keys
+ */
+SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int secp256k1_silentpayments_recipient_public_data_create(
+    const secp256k1_context *ctx,
+    secp256k1_silentpayments_public_data *public_data,
+    const unsigned char *outpoint_smallest36,
+    const secp256k1_xonly_pubkey * const *xonly_pubkeys,
+    size_t n_xonly_pubkeys,
+    const secp256k1_pubkey * const *plain_pubkeys,
+    size_t n_plain_pubkeys
+) SECP256K1_ARG_NONNULL(1) SECP256K1_ARG_NONNULL(2) SECP256K1_ARG_NONNULL(3);
+
+/** Serialize a silentpayments_public_data object into a 33-byte sequence.
+ *
+ *  Returns: 1 always.
+ *
+ *  Args:       ctx: pointer to a context object.
+ *  Out:   output33: pointer to a 33-byte array to place the serialized `silentpayments_public_data` in.
+ *  In: public_data: pointer to an initialized silentpayments_public_data object.
+ */
+SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int secp256k1_silentpayments_recipient_public_data_serialize(
+    const secp256k1_context *ctx,
+    unsigned char *output33,
+    const secp256k1_silentpayments_public_data *public_data
+) SECP256K1_ARG_NONNULL(1) SECP256K1_ARG_NONNULL(2) SECP256K1_ARG_NONNULL(3);
+
+/** Parse a 33-byte sequence into a silent_payments_public_data object.
+ *
+ *  Returns: 1 if the data was able to be parsed.
+ *           0 if the sequence is invalid (e.g. does not represent a valid public key).
+ *
+ *  Args:        ctx: pointer to a context object.
+ *  Out: public_data: pointer to a silentpayments_public_data object. If 1 is returned, it is set to a
+ *                    parsed version of input33.
+ *  In:      input33: pointer to a serialized silentpayments_public_data.
+ */
+
+SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int secp256k1_silentpayments_recipient_public_data_parse(
+    const secp256k1_context *ctx,
+    secp256k1_silentpayments_public_data *public_data,
+    const unsigned char *input33
+) SECP256K1_ARG_NONNULL(1) SECP256K1_ARG_NONNULL(2) SECP256K1_ARG_NONNULL(3);
+
+/** Scan for Silent Payment transaction outputs.
+ *
+ *  Given a input public sum, an input_hash, a recipient's spend public key B_spend, and the relevant transaction
+ *  outputs, scan for outputs belong to the recipient and return the tweak(s) needed for spending
+ *  the output(s). An optional label_lookup callback function and label_context can be passed if the
+ *  recipient uses labels. This allows for checking if a label exists in the recipients label cache
+ *  and retrieving the label tweak during scanning.
+ *
+ *  Returns: 1 if output scanning was successful. 0 if an error occured.
+ *  Args:                  ctx: pointer to a context object
+ *  Out:         found_outputs: pointer to an array of pointers to found output objects. The found outputs
+ *                              array MUST be initialized to be the same length as the tx_outputs array
+ *             n_found_outputs: pointer to an integer indicating the final size of the found outputs array.
+ *                              This number represents the number of outputs found while scanning (0 if
+ *                              none are found)
+ *  In:             tx_outputs: pointer to the tx's x-only public key outputs
+ *                n_tx_outputs: the number of tx_outputs being scanned
+ *                    scan_key: pointer to the recipient's scan key
+ *                 public_data: pointer to the input public key sum (optionaly, with the `input_hash`
+ *                              multiplied in, see `_recipient_compute_public_data`).
+ *      recipient_spend_pubkey: pointer to the receiver's spend pubkey
+ *                label_lookup: pointer to a callback function for looking up a label value. This fucntion
+ *                              takes a label pubkey as an argument and returns a pointer to the label tweak
+ *                              if the label exists, otherwise returns a nullptr (NULL if labels are not used)
+ *               label_context: pointer to a label context object (NULL if labels are not used)
+ */
+
+typedef const unsigned char* (*secp256k1_silentpayments_label_lookup)(const secp256k1_pubkey*, const void*);
+typedef struct {
+    secp256k1_xonly_pubkey output;
+    unsigned char tweak[32];
+    int found_with_label;
+    secp256k1_pubkey label;
+} secp256k1_silentpayments_found_output;
+
+SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int secp256k1_silentpayments_recipient_scan_outputs(
+    const secp256k1_context *ctx,
+    secp256k1_silentpayments_found_output **found_outputs,
+    size_t *n_found_outputs,
+    const secp256k1_xonly_pubkey * const *tx_outputs,
+    size_t n_tx_outputs,
+    const unsigned char *scan_key,
+    const secp256k1_silentpayments_public_data *public_data,
+    const secp256k1_pubkey *receiver_spend_pubkey,
+    const secp256k1_silentpayments_label_lookup label_lookup,
+    const void *label_context
+) SECP256K1_ARG_NONNULL(1) SECP256K1_ARG_NONNULL(2) SECP256K1_ARG_NONNULL(3) SECP256K1_ARG_NONNULL(4)
+    SECP256K1_ARG_NONNULL(6) SECP256K1_ARG_NONNULL(7) SECP256K1_ARG_NONNULL(8);
+
 #ifdef __cplusplus
 }
 #endif
