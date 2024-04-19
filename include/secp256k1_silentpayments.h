@@ -240,10 +240,10 @@ SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int secp256k1_silentpayments_recipien
  *                              none are found)
  *  In:             tx_outputs: pointer to the tx's x-only public key outputs
  *                n_tx_outputs: the number of tx_outputs being scanned
- *                    scan_key: pointer to the recipient's scan key
+ *          recipient_scan_key: pointer to the recipient's scan key
  *                 public_data: pointer to the input public key sum (optionaly, with the `input_hash`
- *                              multiplied in, see `_recipient_compute_public_data`).
- *      recipient_spend_pubkey: pointer to the receiver's spend pubkey
+ *                              multiplied in, see `_recipient_public_data_create`).
+ *      recipient_spend_pubkey: pointer to the recipient's spend pubkey
  *                label_lookup: pointer to a callback function for looking up a label value. This fucntion
  *                              takes a label pubkey as an argument and returns a pointer to the label tweak
  *                              if the label exists, otherwise returns a nullptr (NULL if labels are not used)
@@ -264,9 +264,9 @@ SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int secp256k1_silentpayments_recipien
     size_t *n_found_outputs,
     const secp256k1_xonly_pubkey * const *tx_outputs,
     size_t n_tx_outputs,
-    const unsigned char *scan_key,
+    const unsigned char *recipient_scan_key,
     const secp256k1_silentpayments_public_data *public_data,
-    const secp256k1_pubkey *receiver_spend_pubkey,
+    const secp256k1_pubkey *recipient_spend_pubkey,
     const secp256k1_silentpayments_label_lookup label_lookup,
     const void *label_context
 ) SECP256K1_ARG_NONNULL(1) SECP256K1_ARG_NONNULL(2) SECP256K1_ARG_NONNULL(3) SECP256K1_ARG_NONNULL(4)
