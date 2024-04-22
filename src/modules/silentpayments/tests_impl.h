@@ -212,12 +212,8 @@ void run_silentpayments_test_vector_receive(const struct bip352_test_vector *tes
                  * For this example, we'll just iterate through the list of pubkeys */
                 found = 0;
                 secp256k1_xonly_pubkey_serialize(CTX, xonly_print, &potential_output);
-                printf("what we generated :");
-                print_hex(xonly_print, 32);
                 for (i = 0; i < test->num_to_scan_outputs; i++) {
                     secp256k1_xonly_pubkey_serialize(CTX, xonly_print, tx_outputs[i]);
-                    printf("what is in the tx :");
-                    print_hex(xonly_print, 32);
                     if (secp256k1_xonly_pubkey_cmp(CTX, &potential_output, tx_outputs[i]) == 0) {
                         secp256k1_xonly_pubkey_serialize(CTX, found_outputs_light_client[n_found], &potential_output);
                         found = 1;

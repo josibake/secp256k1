@@ -494,8 +494,10 @@ int secp256k1_silentpayments_recipient_scan_outputs(
         found = 0;
         for (i = 0; i < n_tx_outputs; i++) {
             if (secp256k1_xonly_pubkey_cmp(ctx, &P_output_xonly, tx_outputs[i]) == 0) {
-                found_outputs[n_found]->output = *tx_outputs[i];
+                secp256k1_xonly_pubkey_save(&found_outputs[n_found]->output, &P_output_ge);
                 secp256k1_scalar_get_b32(found_outputs[n_found]->tweak, &t_k_scalar);
+                found_outputs[n_found]->found_with_label = 0;
+                secp256k1_pubkey_save(&found_outputs[n_found]->label, &P_output_ge);
                 found = 1;
                 n_found++;
                 k++;
@@ -522,9 +524,9 @@ int secp256k1_silentpayments_recipient_scan_outputs(
 
                 label_tweak = label_lookup(&label_pubkey, label_context);
                 if (label_tweak != NULL) {
-                    found_outputs[n_found]->output = *tx_outputs[i];
+                    secp256k1_xonly_pubkey_save(&found_outputs[n_found]->output, &tx_output_ge);
                     found_outputs[n_found]->found_with_label = 1;
-                    found_outputs[n_found]->label = label_pubkey;
+                    secp256k1_pubkey_save(&found_outputs[n_found]->label, &label_ge);
                     secp256k1_scalar_get_b32(found_outputs[n_found]->tweak, &t_k_scalar);
                     if (!secp256k1_ec_seckey_tweak_add(ctx, found_outputs[n_found]->tweak, label_tweak)) {
                         return 0;
@@ -544,9 +546,9 @@ int secp256k1_silentpayments_recipient_scan_outputs(
 
                 label_tweak = label_lookup(&label_pubkey, label_context);
                 if (label_tweak != NULL) {
-                    found_outputs[n_found]->output = *tx_outputs[i];
+                    secp256k1_xonly_pubkey_save(&found_outputs[n_found]->output, &tx_output_ge);
                     found_outputs[n_found]->found_with_label = 1;
-                    found_outputs[n_found]->label = label_pubkey;
+                    secp256k1_pubkey_save(&found_outputs[n_found]->label, &label_ge);
                     secp256k1_scalar_get_b32(found_outputs[n_found]->tweak, &t_k_scalar);
                     if (!secp256k1_ec_seckey_tweak_add(ctx, found_outputs[n_found]->tweak, label_tweak)) {
                         return 0;
