@@ -111,11 +111,10 @@ const unsigned char* label_lookup(
 }
 
 int main(void) {
-    enum { N_TX_INPUTS = 2, N_TX_OUTPUTS = 3 };
     unsigned char randomize[32];
     unsigned char xonly_print[32];
-    secp256k1_xonly_pubkey tx_inputs[N_TX_INPUTS];
-    secp256k1_xonly_pubkey tx_outputs[N_TX_OUTPUTS];
+    secp256k1_xonly_pubkey tx_inputs[2];
+    secp256k1_xonly_pubkey tx_outputs[3];
     int ret;
     size_t i;
 
@@ -133,14 +132,14 @@ int main(void) {
 
     /*** Sending ***/
     {
-        secp256k1_keypair sender_seckeys[N_TX_INPUTS];
-        const secp256k1_keypair *sender_seckey_ptrs[N_TX_INPUTS];
-        secp256k1_silentpayments_recipient recipients[N_TX_OUTPUTS];
-        const secp256k1_silentpayments_recipient *recipient_ptrs[N_TX_OUTPUTS];
-        secp256k1_xonly_pubkey generated_outputs[N_TX_OUTPUTS];
-        secp256k1_xonly_pubkey *generated_output_ptrs[N_TX_OUTPUTS];
-        char* address_amounts[N_TX_OUTPUTS] = {"1.0 BTC", "2.0 BTC", "3.0 BTC"};
-        unsigned char (*sp_addresses[N_TX_OUTPUTS])[2][33];
+        secp256k1_keypair sender_seckeys[2];
+        const secp256k1_keypair *sender_seckey_ptrs[2];
+        secp256k1_silentpayments_recipient recipients[3];
+        const secp256k1_silentpayments_recipient *recipient_ptrs[3];
+        secp256k1_xonly_pubkey generated_outputs[3];
+        secp256k1_xonly_pubkey *generated_output_ptrs[3];
+        char* address_amounts[3] = {"1.0 BTC", "2.0 BTC", "3.0 BTC"};
+        unsigned char (*sp_addresses[3])[2][33];
         unsigned char seckey[32];
 
         /*** Generate private keys for the sender ***
@@ -159,7 +158,7 @@ int main(void) {
          * If the secret key is zero or out of range (bigger than secp256k1's
          * order), fail. Note that the probability of this happening is
          * negligible. */
-        for (i = 0; i < N_TX_INPUTS; i++) {
+        for (i = 0; i < 2; i++) {
             if (!fill_random(seckey, sizeof(seckey))) {
                 printf("Failed to generate randomness\n");
                 return 1;
@@ -193,7 +192,7 @@ int main(void) {
         sp_addresses[0] = &carol_address; /* : 1.0 BTC */
         sp_addresses[1] = &bob_address;   /* : 2.0 BTC */
         sp_addresses[2] = &carol_address; /* : 3.0 BTC */
-        for (i = 0; i < N_TX_OUTPUTS; i++) { ret =
+        for (i = 0; i < 3; i++) { ret =
             secp256k1_ec_pubkey_parse(ctx,
                 &recipients[i].scan_pubkey,
                 (*(sp_addresses[i]))[0],
@@ -215,19 +214,19 @@ int main(void) {
             recipients[i].index = i;
             recipient_ptrs[i] = &recipients[i];
         }
-        for (i = 0; i < N_TX_OUTPUTS; i++) {
+        for (i = 0; i < 3; i++) {
             generated_output_ptrs[i] = &generated_outputs[i];
         }
         ret = secp256k1_silentpayments_sender_create_outputs(ctx,
             generated_output_ptrs,
-            recipient_ptrs, N_TX_OUTPUTS,
+            recipient_ptrs, 3,
             smallest_outpoint,
-            sender_seckey_ptrs, N_TX_INPUTS,
+            sender_seckey_ptrs, 2,
             NULL, 0
         );
         assert(ret);
         printf("Alice created the following outputs for Bob and Carol: \n");
-        for (i = 0; i < N_TX_OUTPUTS; i++) {
+        for (i = 0; i < 3; i++) {
             printf("    ");
             printf("%s : ", address_amounts[i]);
             secp256k1_xonly_pubkey_serialize(ctx,
@@ -240,7 +239,7 @@ int main(void) {
          * `tx_outputs` array is used to represent the final transaction, which
          * is what Bob and Carol would use for scanning.
          */
-        for (i = 0; i < N_TX_OUTPUTS; i++) {
+        for (i = 0; i < 3; i++) {
             tx_outputs[i] = generated_outputs[i];
         }
 
@@ -253,7 +252,7 @@ int main(void) {
          * Here we are preventing these writes from being optimized out, as any
          * good compiler will remove any writes that aren't used. */
         secure_erase(seckey, sizeof(seckey));
-        for (i = 0; i < N_TX_INPUTS; i++) {
+        for (i = 0; i < 2; i++) {
             secure_erase(&sender_seckeys[i], sizeof(sender_seckeys[i]));
         }
     }
@@ -265,20 +264,21 @@ int main(void) {
          * Here we create a few global variables to represent the transaction
          * data:
          *
-         *     1. The transaction inputs, `tx_input_ptrs`
-         *     2. The transaction outputs, `tx_output_ptrs`
+         *     1. The silent payments eligible inputs from the transaction,
+         *        `tx_input_ptrs`
+         *     2. The taproot outputs from the transaction, `tx_output_ptrs`
          *
          * These will be used to demonstrate scanning as a full node and
          * scanning as a light client.
          */
-        const secp256k1_xonly_pubkey *tx_input_ptrs[N_TX_INPUTS];
-        const secp256k1_xonly_pubkey *tx_output_ptrs[N_TX_OUTPUTS];
+        const secp256k1_xonly_pubkey *tx_input_ptrs[2];
+        const secp256k1_xonly_pubkey *tx_output_ptrs[3];
         unsigned char light_client_data33[33];
 
-        for (i = 0; i < N_TX_INPUTS; i++) {
+        for (i = 0; i < 2; i++) {
             tx_input_ptrs[i] = &tx_inputs[i];
         }
-        for (i = 0; i < N_TX_OUTPUTS; i++) {
+        for (i = 0; i < 3; i++) {
             tx_output_ptrs[i] = &tx_outputs[i];
         }
 
@@ -292,14 +292,14 @@ int main(void) {
              *     2. Call `_silentpayments_recipient_scan_outputs`
              *
              */
-            secp256k1_silentpayments_found_output found_outputs[N_TX_OUTPUTS];
-            secp256k1_silentpayments_found_output *found_output_ptrs[N_TX_OUTPUTS];
+            secp256k1_silentpayments_found_output found_outputs[3];
+            secp256k1_silentpayments_found_output *found_output_ptrs[3];
             secp256k1_silentpayments_public_data public_data;
             secp256k1_pubkey spend_pubkey;
             size_t n_found_outputs;
             struct labels_cache labels_cache;
 
-            for (i = 0; i < N_TX_OUTPUTS; i++) {
+            for (i = 0; i < 3; i++) {
                 found_output_ptrs[i] = &found_outputs[i];
             }
             {
@@ -369,7 +369,7 @@ int main(void) {
             ret = secp256k1_silentpayments_recipient_public_data_create(ctx,
                 &public_data,
                 smallest_outpoint,
-                tx_input_ptrs, N_TX_INPUTS,
+                tx_input_ptrs, 2,
                 NULL, 0 /* NULL because no eligible plain pubkey inputs were found in the tx */
             );
             assert(ret);
@@ -383,7 +383,7 @@ int main(void) {
             n_found_outputs = 0;
             ret = secp256k1_silentpayments_recipient_scan_outputs(ctx,
                 found_output_ptrs, &n_found_outputs,
-                tx_output_ptrs, N_TX_OUTPUTS,
+                tx_output_ptrs, 3,
                 bob_scan_key,
                 &public_data,
                 &spend_pubkey,
@@ -466,7 +466,7 @@ int main(void) {
                      * through the list of transaction outputs
                      */
                     found = 0;
-                    for (i = 0; i < N_TX_OUTPUTS; i++) {
+                    for (i = 0; i < 3; i++) {
                         if (secp256k1_xonly_pubkey_cmp(ctx, &potential_output, &tx_outputs[i]) == 0) {
                             secp256k1_xonly_pubkey_serialize(ctx,
                                 ser_found_outputs[n_found_outputs],
