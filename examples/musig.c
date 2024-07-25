@@ -20,6 +20,7 @@
 #include <secp256k1_musig.h>
 
 #include "examples_util.h"
+#include <stdlib.h>
 
 struct signer_secrets {
     secp256k1_keypair keypair;
@@ -33,7 +34,7 @@ struct signer {
 };
 
  /* Number of public keys involved in creating the aggregate signature */
-#define N_SIGNERS 3
+#define N_SIGNERS 100000
 /* Create a key pair, store it in signer_secrets->keypair and signer->pubkey */
 static int create_keypair(const secp256k1_context* ctx, struct signer_secrets *signer_secrets, struct signer *signer) {
     unsigned char seckey[32];
@@ -165,16 +166,21 @@ static int sign(const secp256k1_context* ctx, struct signer_secrets *signer_secr
     return secp256k1_musig_partial_sig_agg(ctx, sig64, &session, partial_sigs, N_SIGNERS);
 }
 
- int main(void) {
+int main(void) {
     secp256k1_context* ctx;
     int i;
-    struct signer_secrets signer_secrets[N_SIGNERS];
-    struct signer signers[N_SIGNERS];
-    const secp256k1_pubkey *pubkeys_ptr[N_SIGNERS];
+    struct signer_secrets *signer_secrets = malloc(N_SIGNERS * sizeof(struct signer_secrets));
+    struct signer *signers = malloc(N_SIGNERS * sizeof(struct signer));
+    const secp256k1_pubkey **pubkeys_ptr = malloc(N_SIGNERS * sizeof(secp256k1_pubkey*));
     secp256k1_xonly_pubkey agg_pk;
     secp256k1_musig_keyagg_cache cache;
     unsigned char msg[32] = "this_could_be_the_hash_of_a_msg!";
     unsigned char sig[64];
+
+    if (signer_secrets == NULL || signers == NULL || pubkeys_ptr == NULL) {
+        printf("Memory allocation failed\n");
+        return 1;
+    }
 
     /* Create a secp256k1 context */
     ctx = secp256k1_context_create(SECP256K1_CONTEXT_NONE);
@@ -182,6 +188,9 @@ static int sign(const secp256k1_context* ctx, struct signer_secrets *signer_secr
     for (i = 0; i < N_SIGNERS; i++) {
         if (!create_keypair(ctx, &signer_secrets[i], &signers[i])) {
             printf("FAILED\n");
+            free(signer_secrets);
+            free(signers);
+            free(pubkeys_ptr);
             return 1;
         }
         pubkeys_ptr[i] = &signers[i].pubkey;
@@ -194,6 +203,9 @@ static int sign(const secp256k1_context* ctx, struct signer_secrets *signer_secr
      * while providing a non-NULL agg_pk argument. */
     if (!secp256k1_musig_pubkey_agg(ctx, NULL, &cache, pubkeys_ptr, N_SIGNERS)) {
         printf("FAILED\n");
+        free(signer_secrets);
+        free(signers);
+        free(pubkeys_ptr);
         return 1;
     }
     printf("ok\n");
@@ -202,6 +214,9 @@ static int sign(const secp256k1_context* ctx, struct signer_secrets *signer_secr
     /* Optionally tweak the aggregate key */
     if (!tweak(ctx, &agg_pk, &cache)) {
         printf("FAILED\n");
+        free(signer_secrets);
+        free(signers);
+        free(pubkeys_ptr);
         return 1;
     }
     printf("ok\n");
@@ -209,6 +224,9 @@ static int sign(const secp256k1_context* ctx, struct signer_secrets *signer_secr
     fflush(stdout);
     if (!sign(ctx, signer_secrets, signers, &cache, msg, sig)) {
         printf("FAILED\n");
+        free(signer_secrets);
+        free(signers);
+        free(pubkeys_ptr);
         return 1;
     }
     printf("ok\n");
@@ -216,6 +234,9 @@ static int sign(const secp256k1_context* ctx, struct signer_secrets *signer_secr
     fflush(stdout);
     if (!secp256k1_schnorrsig_verify(ctx, sig, msg, 32, &agg_pk)) {
         printf("FAILED\n");
+        free(signer_secrets);
+        free(signers);
+        free(pubkeys_ptr);
         return 1;
     }
     printf("ok\n");
@@ -230,6 +251,9 @@ static int sign(const secp256k1_context* ctx, struct signer_secrets *signer_secr
     for (i = 0; i < N_SIGNERS; i++) {
         secure_erase(&signer_secrets[i], sizeof(signer_secrets[i]));
     }
+    free(signer_secrets);
+    free(signers);
+    free(pubkeys_ptr);
     secp256k1_context_destroy(ctx);
     return 0;
 }
