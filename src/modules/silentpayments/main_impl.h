@@ -64,22 +64,15 @@ static void secp256k1_silentpayments_calculate_input_hash(unsigned char *input_h
     secp256k1_sha256_finalize(&hash, input_hash);
 }
 
-static void secp256k1_silentpayments_create_shared_secret(const secp256k1_context *ctx, unsigned char *shared_secret33, const secp256k1_scalar *secret_component, const secp256k1_pubkey *public_component) {
-    secp256k1_gej ss_j;
-    secp256k1_ge ss, pk;
-    size_t len;
+static void secp256k1_silentpayments_create_shared_secret_var(const secp256k1_context *ctx, unsigned char *shared_secret33, const unsigned char *secret_component, const secp256k1_pubkey *public_component) {
+    secp256k1_pubkey tmp = *public_component;
+    size_t len = 33;
     int ret;
     memset(shared_secret33, 0, 33);
-    secp256k1_pubkey_load(ctx, &pk, public_component);
 
     /* Compute shared_secret = tweaked_secret_component * Public_component */
-    secp256k1_ecmult_const(&ss_j, &pk, secret_component);
-    secp256k1_ge_set_gej(&ss, &ss_j);
-    /* This can only fail if the shared secret is the point at infinity, which should be
-     * impossible at this point, considering we have already validated the public key and
-     * the secret key being used
-     */
-    ret = secp256k1_eckey_pubkey_serialize(&ss, shared_secret33, &len, 1);
+    ret = secp256k1_ec_pubkey_tweak_mul(ctx, &tmp, secret_component);
+    ret &= secp256k1_ec_pubkey_serialize(ctx, shared_secret33, &len, &tmp, SECP256K1_EC_COMPRESSED);
     VERIFY_CHECK(ret && len == 33);
     (void)ret;
 }
@@ -451,19 +444,16 @@ int secp256k1_silentpayments_recipient_scan_outputs(
     if (!ret) {
         return 0;
     }
+    secp256k1_pubkey_load(ctx, &recipient_spend_pubkey_ge, recipient_spend_pubkey);
     combined = (int)public_data->data[0];
     if (!combined) {
-        unsigned char input_hash[32];
-        secp256k1_scalar input_hash_scalar;
-        int overflow = 0;
-
-        secp256k1_silentpayments_recipient_public_data_load_input_hash(input_hash, public_data);
-        secp256k1_scalar_set_b32(&input_hash_scalar, input_hash, &overflow);
-        secp256k1_scalar_mul(&rsk_scalar, &rsk_scalar, &input_hash_scalar);
-        ret &= !overflow;
+        unsigned char tweaked_scan_key[32];
+        secp256k1_silentpayments_recipient_public_data_load_input_hash(tweaked_scan_key, public_data);
+        ret &= secp256k1_ec_seckey_tweak_mul(ctx, tweaked_scan_key, recipient_scan_key);
+        secp256k1_silentpayments_create_shared_secret_var(ctx, shared_secret, tweaked_scan_key, &A_sum);
+    } else {
+        secp256k1_silentpayments_create_shared_secret_var(ctx, shared_secret, recipient_scan_key, &A_sum);
     }
-    secp256k1_pubkey_load(ctx, &recipient_spend_pubkey_ge, recipient_spend_pubkey);
-    secp256k1_silentpayments_create_shared_secret(ctx, shared_secret, &rsk_scalar, &A_sum);
 
     found_idx = 0;
     n_found = 0;
