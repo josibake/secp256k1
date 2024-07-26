@@ -77,6 +77,22 @@ static void secp256k1_silentpayments_create_shared_secret_var(const secp256k1_co
     (void)ret;
 }
 
+static void secp256k1_silentpayments_create_shared_secret_const(const secp256k1_context *ctx, unsigned char *shared_secret33, const secp256k1_scalar *secret_component, const secp256k1_pubkey *public_component) {
+    secp256k1_gej ss_j;
+    secp256k1_ge ss, pk;
+    size_t len;
+    int ret = 1;
+    memset(shared_secret33, 0, 33);
+
+    /* Compute shared_secret = tweaked_secret_component * Public_component */
+    secp256k1_pubkey_load(ctx, &pk, public_component);
+    secp256k1_ecmult_const(&ss_j, &pk, secret_component);
+    secp256k1_ge_set_gej(&ss, &ss_j);
+    ret &= secp256k1_eckey_pubkey_serialize(&ss, shared_secret33, &len, 1);
+    VERIFY_CHECK(ret && len == 33);
+    (void)ret;
+}
+
 /** Set hash state to the BIP340 tagged hash midstate for "BIP0352/SharedSecret". */
 static void secp256k1_silentpayments_sha256_init_sharedsecret(secp256k1_sha256* hash) {
     secp256k1_sha256_initialize(hash);
@@ -214,7 +230,7 @@ int secp256k1_silentpayments_sender_create_outputs(
     for (i = 0; i < n_recipients; i++) {
         if ((secp256k1_ec_pubkey_cmp(ctx, &last_recipient.scan_pubkey, &recipients[i]->scan_pubkey) != 0) || (i == 0)) {
             /* if we are on a different scan pubkey, its time to recreate the the shared secret and reset k to 0 */
-            secp256k1_silentpayments_create_shared_secret(ctx, shared_secret, &a_sum_scalar, &recipients[i]->scan_pubkey);
+            secp256k1_silentpayments_create_shared_secret_const(ctx, shared_secret, &a_sum_scalar, &recipients[i]->scan_pubkey);
             k = 0;
         }
         ret &= secp256k1_silentpayments_create_output_pubkey(ctx, generated_outputs[recipients[i]->index], shared_secret, &recipients[i]->spend_pubkey, k);
