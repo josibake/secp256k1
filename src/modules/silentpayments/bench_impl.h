@@ -68,7 +68,28 @@ static void bench_silentpayments_scan_setup(void* arg) {
     memcpy(data->scan_key, scan_key, 32);
 }
 
-static void bench_silentpayments_scan(void* arg, int iters) {
+static void bench_silentpayments_output_scan(void* arg, int iters) {
+    int i, k = 0;
+    bench_silentpayments_data *data = (bench_silentpayments_data*)arg;
+
+    for (i = 0; i < iters; i++) {
+        unsigned char shared_secret[33];
+        secp256k1_xonly_pubkey xonly_output;
+        CHECK(secp256k1_silentpayments_recipient_create_shared_secret(data->ctx,
+            shared_secret,
+            data->scan_key,
+            &data->public_data
+        ));
+        CHECK(secp256k1_silentpayments_recipient_create_output_pubkey(data->ctx,
+            &xonly_output,
+            shared_secret,
+            &data->spend_pubkey,
+            k
+        ));
+    }
+}
+
+static void bench_silentpayments_full_tx_scan(void* arg, int iters) {
     int i;
     size_t n_found = 0;
     secp256k1_silentpayments_found_output *found_output_ptrs[4];
@@ -98,7 +119,8 @@ static void run_silentpayments_bench(int iters, int argc, char** argv) {
     /* create a context with no capabilities */
     data.ctx = secp256k1_context_create(SECP256K1_FLAGS_TYPE_CONTEXT);
 
-    if (d || have_flag(argc, argv, "silentpayments")) run_benchmark("silentpayments", bench_silentpayments_scan, bench_silentpayments_scan_setup, NULL, &data, 10, iters);
+    if (d || have_flag(argc, argv, "silentpayments")) run_benchmark("silentpayments_full_tx_scan", bench_silentpayments_full_tx_scan, bench_silentpayments_scan_setup, NULL, &data, 10, iters);
+    if (d || have_flag(argc, argv, "silentpayments")) run_benchmark("silentpayments_output_scan", bench_silentpayments_output_scan, bench_silentpayments_scan_setup, NULL, &data, 10, iters);
 
     secp256k1_context_destroy(data.ctx);
 }
