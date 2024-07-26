@@ -570,8 +570,7 @@ int secp256k1_silentpayments_recipient_scan_outputs(
 
 int secp256k1_silentpayments_recipient_create_shared_secret(const secp256k1_context *ctx, unsigned char *shared_secret33, const unsigned char *recipient_scan_key, const secp256k1_silentpayments_public_data *public_data) {
     secp256k1_pubkey A_tweaked;
-    secp256k1_scalar rsk;
-    int ret = 1;
+    int ret;
     /* Sanity check inputs */
     ARG_CHECK(shared_secret33 != NULL);
     ARG_CHECK(recipient_scan_key != NULL);
@@ -580,16 +579,12 @@ int secp256k1_silentpayments_recipient_create_shared_secret(const secp256k1_cont
     /* TODO: do we need a _cmov operation here to avoid leaking information about the scan key?
      * Recall: a scan key is not really "secret" data, its functionally the same as an xpub
      */
-    ret &= secp256k1_scalar_set_b32_seckey(&rsk, recipient_scan_key);
-    ret &= secp256k1_silentpayments_recipient_public_data_load_pubkey(ctx, &A_tweaked, public_data);
+    ret = secp256k1_silentpayments_recipient_public_data_load_pubkey(ctx, &A_tweaked, public_data);
     /* If there are any issues with the recipient scan key or public data, return early */
     if (!ret) {
         return 0;
     }
-    secp256k1_silentpayments_create_shared_secret(ctx, shared_secret33, &rsk, &A_tweaked);
-
-    /* Explicitly clear secrets */
-    secp256k1_scalar_clear(&rsk);
+    secp256k1_silentpayments_create_shared_secret_var(ctx, shared_secret33, recipient_scan_key, &A_tweaked);
     return ret;
 }
 
