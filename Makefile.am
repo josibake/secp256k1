@@ -197,7 +197,7 @@ TESTS += ellswift_example
 endif
 if ENABLE_MODULE_SILENTPAYMENTS
 noinst_PROGRAMS += silentpayments_example
-silentpayments_example_SOURCES = examples/silentpayments.c
+silentpayments_example_SOURCES = examples/spscan.c
 silentpayments_example_CPPFLAGS = -I$(top_srcdir)/include -DSECP256K1_STATIC
 silentpayments_example_LDADD = libsecp256k1.la
 silentpayments_example_LDFLAGS = -static
