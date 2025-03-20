@@ -101,6 +101,9 @@ static void run_tests(secp256k1_context *ctx, unsigned char *key) {
 #ifdef ENABLE_MODULE_SILENTPAYMENTS
     secp256k1_xonly_pubkey generated_output;
     secp256k1_xonly_pubkey *generated_outputs[1];
+    secp256k1_pubkey scan_pubkey;
+    unsigned char ser_pubkey[33];
+    size_t len;
     secp256k1_silentpayments_recipient recipient;
     const secp256k1_silentpayments_recipient *recipients[1];
     unsigned char outpoint_smallest[36] = { 0 };
@@ -294,7 +297,9 @@ static void run_tests(secp256k1_context *ctx, unsigned char *key) {
     generated_outputs[0] = &generated_output;
 
     /* Initialize recipient */
-    CHECK(secp256k1_ec_pubkey_create(ctx, &recipient.scan_pubkey, key));
+    CHECK(secp256k1_ec_pubkey_create(ctx, &scan_pubkey, key));
+    CHECK(secp256k1_ec_pubkey_serialize(ctx, ser_pubkey, &len, &scan_pubkey, SECP256K1_EC_COMPRESSED));
+    memcpy(&recipient.scan_pubkey, &ser_pubkey[1], 32);
     key[31] ^= 1;
     CHECK(secp256k1_ec_pubkey_create(ctx, &recipient.spend_pubkey, key));
     key[31] ^= (1 << 1);

@@ -38,7 +38,7 @@ static const unsigned char secp256k1_silentpayments_public_data_magic[4] = { 0xa
  *  and used to return the generated outputs matching the original ordering.
  */
 typedef struct {
-    secp256k1_pubkey scan_pubkey;
+    unsigned char scan_pubkey[32];
     secp256k1_pubkey spend_pubkey;
     size_t index;
 } secp256k1_silentpayments_recipient;

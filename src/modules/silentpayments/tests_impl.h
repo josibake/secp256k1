@@ -133,7 +133,7 @@ static void test_recipient_sort_helper(unsigned char (*sp_addresses[3])[2][33], 
 
     seckey_ptrs[0] = ALICE_SECKEY;
     for (i = 0; i < 3; i++) {
-        CHECK(secp256k1_ec_pubkey_parse(CTX, &recipients[i].scan_pubkey, (*sp_addresses[i])[0], 33));
+        CHECK(memcpy(&recipients[i].scan_pubkey, &(*sp_addresses[i])[0][1], 32));
         CHECK(secp256k1_ec_pubkey_parse(CTX, &recipients[i].spend_pubkey,(*sp_addresses[i])[1], 33));
         recipients[i].index = i;
         recipient_ptrs[i] = &recipients[i];
@@ -208,7 +208,7 @@ static void test_send_api(void) {
     sp_addresses[0] = &BOB_ADDRESS;
     sp_addresses[1] = &CAROL_ADDRESS;
     for (i = 0; i < 2; i++) {
-        CHECK(secp256k1_ec_pubkey_parse(CTX, &r[i].scan_pubkey, (*sp_addresses[i])[0], 33));
+        CHECK(memcpy(&r[i].scan_pubkey, &(*sp_addresses[i])[0][1], 32));
         CHECK(secp256k1_ec_pubkey_parse(CTX, &r[i].spend_pubkey,(*sp_addresses[i])[1], 33));
         /* Set the index value incorrectly */
         r[i].index = 0;
@@ -262,15 +262,16 @@ static void test_send_api(void) {
          r[1].spend_pubkey = tmp;
     }
     {
-        secp256k1_pubkey tmp = r[1].scan_pubkey;
+        unsigned char tmp[32];
         int32_t ecount = 0;
+        memcpy(tmp, r[1].scan_pubkey, 32);
 
         memset(&r[1].scan_pubkey, 0, sizeof(r[1].scan_pubkey));
         secp256k1_context_set_illegal_callback(CTX, counting_callback_fn, &ecount);
         CHECK(secp256k1_silentpayments_sender_create_outputs(CTX, op, rp, 2, SMALLEST_OUTPOINT, NULL, 0, p, 1) == 0);
         CHECK(ecount == 2);
         secp256k1_context_set_illegal_callback(CTX, NULL, NULL);
-        r[1].scan_pubkey = tmp;
+        memcpy(r[1].scan_pubkey, tmp, 32);
     }
 }
 
@@ -391,7 +392,7 @@ void run_silentpayments_test_vector_send(const struct bip352_test_vector *test) 
 
     /* Check that sender creates expected outputs */
     for (i = 0; i < test->num_outputs; i++) {
-        CHECK(secp256k1_ec_pubkey_parse(CTX, &recipients[i].scan_pubkey, test->recipient_pubkeys[i].scan_pubkey, 33));
+        memcpy(&recipients[i].scan_pubkey, &test->recipient_pubkeys[i].scan_pubkey[1], 32);
         CHECK(secp256k1_ec_pubkey_parse(CTX, &recipients[i].spend_pubkey, test->recipient_pubkeys[i].spend_pubkey, 33));
         recipients[i].index = i;
         recipient_ptrs[i] = &recipients[i];

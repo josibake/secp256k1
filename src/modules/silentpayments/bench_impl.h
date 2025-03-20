@@ -50,9 +50,8 @@ static void bench_silentpayments_scan_setup(void* arg) {
         0xd4,0x7e,0xae,0x26,0x3d,0x7b,0xc0,0x31
     };
     secp256k1_keypair input_keypair;
-    secp256k1_pubkey input_pubkey;
-    unsigned char input_pubkey33[33];
-    size_t pubkeylen = 33;
+    secp256k1_xonly_pubkey input_pubkey;
+    unsigned char input_pubkey32[32];
 
     for (i = 0; i < 32; i++) {
         data->scalar[i] = i + 1;
@@ -61,10 +60,10 @@ static void bench_silentpayments_scan_setup(void* arg) {
         CHECK(secp256k1_xonly_pubkey_parse(data->ctx, &data->tx_outputs[i], tx_outputs[i]));
     }
     CHECK(secp256k1_keypair_create(data->ctx, &input_keypair, data->scalar));
-    CHECK(secp256k1_keypair_pub(data->ctx, &input_pubkey, &input_keypair));
-    CHECK(secp256k1_ec_pubkey_serialize(data->ctx, input_pubkey33, &pubkeylen, &input_pubkey, SECP256K1_EC_COMPRESSED));
-    CHECK(secp256k1_silentpayments_recipient_public_data_parse(data->ctx, &data->public_data, input_pubkey33));
-    CHECK(secp256k1_ec_pubkey_parse(data->ctx, &data->spend_pubkey, spend_pubkey, pubkeylen));
+    CHECK(secp256k1_keypair_xonly_pub(data->ctx, &input_pubkey, NULL, &input_keypair));
+    CHECK(secp256k1_xonly_pubkey_serialize(data->ctx, input_pubkey32, &input_pubkey));
+    CHECK(secp256k1_silentpayments_recipient_public_data_parse(data->ctx, &data->public_data, input_pubkey32));
+    CHECK(secp256k1_ec_pubkey_parse(data->ctx, &data->spend_pubkey, spend_pubkey, 33));
     memcpy(data->scan_key, scan_key, 32);
 }
 
@@ -73,7 +72,7 @@ static void bench_silentpayments_output_scan(void* arg, int iters) {
     bench_silentpayments_data *data = (bench_silentpayments_data*)arg;
 
     for (i = 0; i < iters; i++) {
-        unsigned char shared_secret[33];
+        unsigned char shared_secret[32];
         secp256k1_xonly_pubkey xonly_output;
         CHECK(secp256k1_silentpayments_recipient_create_shared_secret(data->ctx,
             shared_secret,
