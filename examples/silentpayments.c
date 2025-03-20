@@ -216,12 +216,12 @@ int main(void) {
         sp_addresses[1] = &bob_address;
         sp_addresses[2] = &carol_address;
         for (i = 0; i < N_OUTPUTS; i++) {
-            ret = secp256k1_ec_pubkey_parse(ctx,
-                &recipients[i].scan_pubkey,
-                (*(sp_addresses[i]))[0],
-                33
+            memcpy(
+                recipients[i].scan_pubkey,
+                &(*(sp_addresses[i]))[0][1],
+                32
             );
-            ret &= secp256k1_ec_pubkey_parse(ctx,
+            ret = secp256k1_ec_pubkey_parse(ctx,
                 &recipients[i].labeled_spend_pubkey,
                 (*(sp_addresses[i]))[1],
                 33
@@ -282,7 +282,7 @@ int main(void) {
 
     /*** Receiving ***/
     {
-        unsigned char light_client_data33[33];
+        unsigned char light_client_data33[32];
 
         for (i = 0; i < N_INPUTS; i++) {
             tx_input_ptrs[i] = &tx_inputs[i];
@@ -519,7 +519,7 @@ int main(void) {
              *
              */
             unsigned char ser_found_outputs[2][32];
-            unsigned char shared_secret[33];
+            unsigned char shared_secret[32];
             secp256k1_pubkey spend_pubkey;
             secp256k1_silentpayments_recipient_public_data public_data;
             size_t n_found_outputs;
