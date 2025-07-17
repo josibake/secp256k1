@@ -1,3 +1,4 @@
+# add a comment here to create a conflict with bitcoin core
 cmake_minimum_required(VERSION 3.22)
 
 #=============================
