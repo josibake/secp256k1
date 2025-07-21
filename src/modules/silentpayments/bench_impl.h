@@ -93,15 +93,15 @@ static void bench_silentpayments_output_scan(void* arg, int iters) {
     for (i = 0; i < iters; i++) {
         unsigned char shared_secret[33];
         secp256k1_xonly_pubkey xonly_output;
-        CHECK(secp256k1_silentpayments_recipient_public_data_parse(data->ctx, &public_data, data->input_pubkey33));
+        CHECK(secp256k1_silentpayments_recipient_public_data_parse(data->ctx, &public_data, (const unsigned char(*)[33])&data->input_pubkey33));
         CHECK(secp256k1_silentpayments_recipient_create_shared_secret(data->ctx,
-            shared_secret,
-            data->scan_key,
+            &shared_secret,
+            (const unsigned char(*)[32])&data->scan_key,
             &public_data
         ));
         CHECK(secp256k1_silentpayments_recipient_create_output_pubkey(data->ctx,
             &xonly_output,
-            shared_secret,
+            (const unsigned char(*)[33])&shared_secret,
             &data->spend_pubkey,
             k
         ));
@@ -125,14 +125,14 @@ static void bench_silentpayments_full_tx_scan(void* arg, int iters) {
     for (i = 0; i < iters; i++) {
         CHECK(secp256k1_silentpayments_recipient_public_data_create(data->ctx,
             &public_data,
-            data->smallest_outpoint,
+            (const unsigned char(*)[36])&data->smallest_outpoint,
             tx_input_ptrs, 2,
             NULL, 0
         ));
         CHECK(secp256k1_silentpayments_recipient_scan_outputs(data->ctx,
             found_output_ptrs, &n_found,
             tx_output_ptrs, 2,
-            data->scan_key,
+            (const unsigned char (*)[32])&data->scan_key,
             &public_data,
             &data->spend_pubkey,
             label_lookup, label_cache)

@@ -109,7 +109,7 @@ SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int secp256k1_silentpayments_sender_c
     secp256k1_xonly_pubkey **generated_outputs,
     const secp256k1_silentpayments_recipient **recipients,
     size_t n_recipients,
-    const unsigned char *outpoint_smallest36,
+    const unsigned char (*outpoint_smallest)[36],
     const secp256k1_keypair * const *taproot_seckeys,
     size_t n_taproot_seckeys,
     const unsigned char * const *plain_seckeys,
@@ -135,8 +135,8 @@ SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int secp256k1_silentpayments_sender_c
 SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int secp256k1_silentpayments_recipient_create_label(
     const secp256k1_context *ctx,
     secp256k1_pubkey *label,
-    unsigned char *label_tweak32,
-    const unsigned char *recipient_scan_key32,
+    unsigned char (*label_tweak)[32],
+    const unsigned char (*recipient_scan_key)[32],
     const uint32_t m
 ) SECP256K1_ARG_NONNULL(1) SECP256K1_ARG_NONNULL(2) SECP256K1_ARG_NONNULL(3) SECP256K1_ARG_NONNULL(4);
 
@@ -225,7 +225,7 @@ typedef struct secp256k1_silentpayments_recipient_public_data {
 SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int secp256k1_silentpayments_recipient_public_data_create(
     const secp256k1_context *ctx,
     secp256k1_silentpayments_recipient_public_data *public_data,
-    const unsigned char *outpoint_smallest36,
+    const unsigned char (*outpoint_smallest)[36],
     const secp256k1_xonly_pubkey * const *xonly_pubkeys,
     size_t n_xonly_pubkeys,
     const secp256k1_pubkey * const *plain_pubkeys,
@@ -244,7 +244,7 @@ SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int secp256k1_silentpayments_recipien
  */
 SECP256K1_API int secp256k1_silentpayments_recipient_public_data_serialize(
     const secp256k1_context *ctx,
-    unsigned char *output33,
+    unsigned char (*output)[33],
     const secp256k1_silentpayments_recipient_public_data *public_data
 ) SECP256K1_ARG_NONNULL(1) SECP256K1_ARG_NONNULL(2) SECP256K1_ARG_NONNULL(3);
 
@@ -262,7 +262,7 @@ SECP256K1_API int secp256k1_silentpayments_recipient_public_data_serialize(
 SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int secp256k1_silentpayments_recipient_public_data_parse(
     const secp256k1_context *ctx,
     secp256k1_silentpayments_recipient_public_data *public_data,
-    const unsigned char *input33
+    const unsigned char (*input)[33]
 ) SECP256K1_ARG_NONNULL(1) SECP256K1_ARG_NONNULL(2) SECP256K1_ARG_NONNULL(3);
 
 /** Callback function for label lookups
@@ -352,7 +352,7 @@ SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int secp256k1_silentpayments_recipien
     size_t *n_found_outputs,
     const secp256k1_xonly_pubkey * const *tx_outputs,
     size_t n_tx_outputs,
-    const unsigned char *recipient_scan_key32,
+    const unsigned char (*recipient_scan_key)[32],
     const secp256k1_silentpayments_recipient_public_data *public_data,
     const secp256k1_pubkey *recipient_spend_pubkey,
     const secp256k1_silentpayments_label_lookup label_lookup,
@@ -381,8 +381,8 @@ SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int secp256k1_silentpayments_recipien
  */
 SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int secp256k1_silentpayments_recipient_create_shared_secret(
     const secp256k1_context *ctx,
-    unsigned char *shared_secret33,
-    const unsigned char *recipient_scan_key32,
+    unsigned char (*shared_secret)[33],
+    const unsigned char (*recipient_scan_key)[32],
     const secp256k1_silentpayments_recipient_public_data *public_data
 ) SECP256K1_ARG_NONNULL(1) SECP256K1_ARG_NONNULL(2) SECP256K1_ARG_NONNULL(3) SECP256K1_ARG_NONNULL(4);
 
@@ -412,7 +412,7 @@ SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int secp256k1_silentpayments_recipien
 SECP256K1_API SECP256K1_WARN_UNUSED_RESULT int secp256k1_silentpayments_recipient_create_output_pubkey(
     const secp256k1_context *ctx,
     secp256k1_xonly_pubkey *P_output_xonly,
-    const unsigned char *shared_secret33,
+    const unsigned char (*shared_secret)[33],
     const secp256k1_pubkey *recipient_spend_pubkey,
     const uint32_t k
 ) SECP256K1_ARG_NONNULL(1) SECP256K1_ARG_NONNULL(2) SECP256K1_ARG_NONNULL(3) SECP256K1_ARG_NONNULL(4);

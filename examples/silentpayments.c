@@ -39,7 +39,7 @@ static unsigned char smallest_outpoint[36] = {
     0x16, 0x9e, 0x1e, 0x83, 0xe9, 0x30, 0x85, 0x33, 0x91,
     0xbc, 0x6f, 0x35, 0xf6, 0x05, 0xc6, 0x75, 0x4c, 0xfe,
     0xad, 0x57, 0xcf, 0x83, 0x87, 0x63, 0x9d, 0x3b, 0x40,
-    0x96, 0xc5, 0x4f, 0x18, 0xf4, 0x00, 0x00, 0x00, 0x00
+    0x96, 0xc5, 0x4f, 0x18, 0xf4, 0x00, 0x00, 0x00, 0x00,
 };
 static unsigned char bob_scan_key[32] = {
     0xa8, 0x90, 0x54, 0xc9, 0x5b, 0xe3, 0xc3, 0x01,
@@ -252,7 +252,7 @@ int main(void) {
         ret = secp256k1_silentpayments_sender_create_outputs(ctx,
             tx_output_ptrs,
             recipient_ptrs, N_OUTPUTS,
-            smallest_outpoint,
+            &smallest_outpoint,
             sender_keypair_ptrs, N_INPUTS,
             NULL, 0
         );
@@ -353,8 +353,8 @@ int main(void) {
                  */
                 ret = secp256k1_silentpayments_recipient_create_label(ctx,
                     &label,
-                    labels_cache.entries[0].label_tweak,
-                    bob_scan_key,
+                    &labels_cache.entries[0].label_tweak,
+                    &bob_scan_key,
                     m
                 );
                 assert(ret);
@@ -402,7 +402,7 @@ int main(void) {
              */
             ret = secp256k1_silentpayments_recipient_public_data_create(ctx,
                 &public_data,
-                smallest_outpoint,
+                &smallest_outpoint,
                 tx_input_ptrs, N_INPUTS,
                 NULL, 0 /* NULL because no eligible plain pubkey inputs were found in the tx */
             );
@@ -419,7 +419,7 @@ int main(void) {
             }
             /* Serialize the public data object for later use. */
             ret = secp256k1_silentpayments_recipient_public_data_serialize(ctx,
-                light_client_data33,
+                &light_client_data33,
                 &public_data
             );
             assert(ret);
@@ -429,7 +429,7 @@ int main(void) {
             ret = secp256k1_silentpayments_recipient_scan_outputs(ctx,
                 found_output_ptrs, &n_found_outputs,
                 (const secp256k1_xonly_pubkey * const *)tx_output_ptrs, N_OUTPUTS,
-                bob_scan_key,
+                &bob_scan_key,
                 &public_data,
                 &spend_pubkey,
                 label_lookup, &labels_cache /* NULL, NULL for no labels */
@@ -537,7 +537,7 @@ int main(void) {
              */
             ret = secp256k1_silentpayments_recipient_public_data_parse(ctx,
                 &public_data,
-                light_client_data33
+                &light_client_data33
             );
             if (!ret) {
                 printf("\n");
@@ -545,8 +545,8 @@ int main(void) {
                 return 0;
             }
             ret = secp256k1_silentpayments_recipient_create_shared_secret(ctx,
-                shared_secret,
-                carol_scan_key,
+                &shared_secret,
+                &carol_scan_key,
                 &public_data
             );
             /* Since we've already validated the public data, the only reason this could fail
@@ -563,7 +563,7 @@ int main(void) {
                 while (1) {
                     ret = secp256k1_silentpayments_recipient_create_output_pubkey(ctx,
                         &potential_output,
-                        shared_secret,
+                        &shared_secret,
                         &spend_pubkey,
                         k
                     );

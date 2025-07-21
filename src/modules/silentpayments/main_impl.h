@@ -49,14 +49,14 @@ static void secp256k1_silentpayments_sha256_init_inputs(secp256k1_sha256* hash) 
     hash->bytes = 64;
 }
 
-static void secp256k1_silentpayments_calculate_input_hash(unsigned char *input_hash, const unsigned char *outpoint_smallest36, secp256k1_ge *pubkey_sum) {
+static void secp256k1_silentpayments_calculate_input_hash(unsigned char *input_hash, const unsigned char (*outpoint_smallest)[36], secp256k1_ge *pubkey_sum) {
     secp256k1_sha256 hash;
     unsigned char pubkey_sum_ser[33];
     size_t len;
     int ret;
 
     secp256k1_silentpayments_sha256_init_inputs(&hash);
-    secp256k1_sha256_write(&hash, outpoint_smallest36, 36);
+    secp256k1_sha256_write(&hash, *outpoint_smallest, 36);
     ret = secp256k1_eckey_pubkey_serialize(pubkey_sum, pubkey_sum_ser, &len, 1);
     VERIFY_CHECK(ret && len == sizeof(pubkey_sum_ser));
     (void)ret;
@@ -64,7 +64,7 @@ static void secp256k1_silentpayments_calculate_input_hash(unsigned char *input_h
     secp256k1_sha256_finalize(&hash, input_hash);
 }
 
-static void secp256k1_silentpayments_create_shared_secret(const secp256k1_context *ctx, unsigned char *shared_secret33, const secp256k1_scalar *secret_component, const secp256k1_ge *public_component) {
+static void secp256k1_silentpayments_create_shared_secret(const secp256k1_context *ctx, unsigned char (*shared_secret)[33], const secp256k1_scalar *secret_component, const secp256k1_ge *public_component) {
     secp256k1_gej ss_j;
     secp256k1_ge ss;
     size_t len;
@@ -78,7 +78,7 @@ static void secp256k1_silentpayments_create_shared_secret(const secp256k1_contex
      * impossible at this point, considering we have already validated the public key and
      * the secret key being used
      */
-    ret = secp256k1_eckey_pubkey_serialize(&ss, shared_secret33, &len, 1);
+    ret = secp256k1_eckey_pubkey_serialize(&ss, *shared_secret, &len, 1);
     VERIFY_CHECK(ret && len == 33);
     (void)ret;
     /* While not technically "secret" data, explicitly clear the shared secret since leaking this would allow an attacker
@@ -127,7 +127,7 @@ static void secp256k1_silentpayments_create_t_k(secp256k1_scalar *t_k_scalar, co
     secp256k1_sha256_clear(&hash);
 }
 
-static int secp256k1_silentpayments_create_output_pubkey(const secp256k1_context *ctx, secp256k1_xonly_pubkey *P_output_xonly, const unsigned char *shared_secret33, const secp256k1_pubkey *recipient_labeled_spend_pubkey, uint32_t k) {
+static int secp256k1_silentpayments_create_output_pubkey(const secp256k1_context *ctx, secp256k1_xonly_pubkey *P_output_xonly, const unsigned char (*shared_secret)[33], const secp256k1_pubkey *recipient_labeled_spend_pubkey, uint32_t k) {
     secp256k1_ge P_output_ge;
     secp256k1_scalar t_k_scalar;
     int ret;
@@ -136,7 +136,7 @@ static int secp256k1_silentpayments_create_output_pubkey(const secp256k1_context
      * This will fail if B_spend is the point at infinity or if
      * B_spend + t_k*G is the point at infinity.
      */
-    secp256k1_silentpayments_create_t_k(&t_k_scalar, shared_secret33, k);
+    secp256k1_silentpayments_create_t_k(&t_k_scalar, *shared_secret, k);
     if (!secp256k1_pubkey_load(ctx, &P_output_ge, recipient_labeled_spend_pubkey)) {
         secp256k1_scalar_clear(&t_k_scalar);
         return 0;
@@ -164,7 +164,7 @@ int secp256k1_silentpayments_sender_create_outputs(
     secp256k1_xonly_pubkey **generated_outputs,
     const secp256k1_silentpayments_recipient **recipients,
     size_t n_recipients,
-    const unsigned char *outpoint_smallest36,
+    const unsigned char (*outpoint_smallest)[36],
     const secp256k1_keypair * const *taproot_seckeys,
     size_t n_taproot_seckeys,
     const unsigned char * const *plain_seckeys,
@@ -197,7 +197,7 @@ int secp256k1_silentpayments_sender_create_outputs(
     } else {
         ARG_CHECK(n_plain_seckeys == 0);
     }
-    ARG_CHECK(outpoint_smallest36 != NULL);
+    ARG_CHECK(outpoint_smallest != NULL);
     /* ensure the index field is set correctly */
     for (i = 0; i < n_recipients; i++) {
         ARG_CHECK(recipients[i]->index == i);
@@ -254,7 +254,7 @@ int secp256k1_silentpayments_sender_create_outputs(
      * This should fail if input hash is greater than the curve order, but this is stastically improbable so
      * we only do a verify_check here.
      */
-    secp256k1_silentpayments_calculate_input_hash(input_hash, outpoint_smallest36, &A_sum_ge);
+    secp256k1_silentpayments_calculate_input_hash(input_hash, outpoint_smallest, &A_sum_ge);
     secp256k1_scalar_set_b32(&input_hash_scalar, input_hash, &overflow);
     VERIFY_CHECK(!overflow);
     secp256k1_scalar_mul(&a_sum_scalar, &a_sum_scalar, &input_hash_scalar);
@@ -279,10 +279,10 @@ int secp256k1_silentpayments_sender_create_outputs(
                 secp256k1_scalar_clear(&a_sum_scalar);
                 return 0;
             }
-            secp256k1_silentpayments_create_shared_secret(ctx, shared_secret, &a_sum_scalar, &pk);
+            secp256k1_silentpayments_create_shared_secret(ctx, &shared_secret, &a_sum_scalar, &pk);
             k = 0;
         }
-        if (!secp256k1_silentpayments_create_output_pubkey(ctx, generated_outputs[recipients[i]->index], shared_secret, &recipients[i]->labeled_spend_pubkey, k)) {
+        if (!secp256k1_silentpayments_create_output_pubkey(ctx, generated_outputs[recipients[i]->index], &shared_secret, &recipients[i]->labeled_spend_pubkey, k)) {
             secp256k1_scalar_clear(&a_sum_scalar);
             return 0;
         }
@@ -315,25 +315,25 @@ static void secp256k1_silentpayments_sha256_init_label(secp256k1_sha256* hash) {
     hash->bytes = 64;
 }
 
-int secp256k1_silentpayments_recipient_create_label(const secp256k1_context *ctx, secp256k1_pubkey *label, unsigned char *label_tweak32, const unsigned char *recipient_scan_key32, const uint32_t m) {
+int secp256k1_silentpayments_recipient_create_label(const secp256k1_context *ctx, secp256k1_pubkey *label, unsigned char (*label_tweak)[32], const unsigned char (*recipient_scan_key)[32], const uint32_t m) {
     secp256k1_sha256 hash;
     unsigned char m_serialized[4];
 
     /* Sanity check inputs. */
     VERIFY_CHECK(ctx != NULL);
     ARG_CHECK(label != NULL);
-    ARG_CHECK(label_tweak32 != NULL);
-    ARG_CHECK(recipient_scan_key32 != NULL);
+    ARG_CHECK(label_tweak != NULL);
+    ARG_CHECK(recipient_scan_key != NULL);
 
     /* Compute label_tweak = hash(ser_256(b_scan) || ser_32(m))  [sha256 with tag "BIP0352/Label"] */
     secp256k1_silentpayments_sha256_init_label(&hash);
-    secp256k1_sha256_write(&hash, recipient_scan_key32, 32);
+    secp256k1_sha256_write(&hash, *recipient_scan_key, 32);
     secp256k1_write_be32(m_serialized, m);
     secp256k1_sha256_write(&hash, m_serialized, sizeof(m_serialized));
-    secp256k1_sha256_finalize(&hash, label_tweak32);
+    secp256k1_sha256_finalize(&hash, *label_tweak);
 
     /* Compute label = label_tweak * G */
-    return secp256k1_ec_pubkey_create(ctx, label, label_tweak32);
+    return secp256k1_ec_pubkey_create(ctx, label, *label_tweak);
 }
 
 int secp256k1_silentpayments_recipient_create_labeled_spend_pubkey(const secp256k1_context *ctx, secp256k1_pubkey *labeled_spend_pubkey, const secp256k1_pubkey *recipient_spend_pubkey, const secp256k1_pubkey *label) {
@@ -401,7 +401,7 @@ int secp256k1_silentpayments_recipient_create_labeled_spend_pubkey(const secp256
 int secp256k1_silentpayments_recipient_public_data_create(
     const secp256k1_context *ctx,
     secp256k1_silentpayments_recipient_public_data *public_data,
-    const unsigned char *outpoint_smallest36,
+    const unsigned char (*outpoint_smallest)[36],
     const secp256k1_xonly_pubkey * const *xonly_pubkeys,
     size_t n_xonly_pubkeys,
     const secp256k1_pubkey * const *plain_pubkeys,
@@ -419,7 +419,7 @@ int secp256k1_silentpayments_recipient_public_data_create(
     /* Sanity check inputs */
     VERIFY_CHECK(ctx != NULL);
     ARG_CHECK(public_data != NULL);
-    ARG_CHECK(outpoint_smallest36 != NULL);
+    ARG_CHECK(outpoint_smallest != NULL);
     ARG_CHECK((plain_pubkeys != NULL) || (xonly_pubkeys != NULL));
     if (xonly_pubkeys != NULL) {
         ARG_CHECK(n_xonly_pubkeys > 0);
@@ -452,7 +452,7 @@ int secp256k1_silentpayments_recipient_public_data_create(
     }
     /* Compute input_hash = hash(outpoint_L || A_sum) */
     secp256k1_ge_set_gej(&A_sum_ge, &A_sum_gej);
-    secp256k1_silentpayments_calculate_input_hash(input_hash_local, outpoint_smallest36, &A_sum_ge);
+    secp256k1_silentpayments_calculate_input_hash(input_hash_local, outpoint_smallest, &A_sum_ge);
     /* Convert input_hash to a scalar to ensure the value is less than the curve order.
      *
      * This can only fail if the output of the hash function is greater than the curve order, which
@@ -482,13 +482,13 @@ static int secp256k1_silentpayments_recipient_public_data_load_input_hash(const 
     return 1;
 }
 
-int secp256k1_silentpayments_recipient_public_data_serialize(const secp256k1_context *ctx, unsigned char *output33, const secp256k1_silentpayments_recipient_public_data *public_data) {
+int secp256k1_silentpayments_recipient_public_data_serialize(const secp256k1_context *ctx, unsigned char (*output)[33], const secp256k1_silentpayments_recipient_public_data *public_data) {
     secp256k1_ge ge;
     secp256k1_scalar input_hash_scalar;
     size_t pubkeylen = 33;
 
     VERIFY_CHECK(ctx != NULL);
-    ARG_CHECK(output33 != NULL);
+    ARG_CHECK(output != NULL);
     ARG_CHECK(public_data != NULL);
     ARG_CHECK(secp256k1_memcmp_var(&public_data->data[0], secp256k1_silentpayments_public_data_magic, 4) == 0);
     /* Only allow public_data to be serialized if it has the hash and the summed public key
@@ -508,20 +508,20 @@ int secp256k1_silentpayments_recipient_public_data_serialize(const secp256k1_con
     secp256k1_silentpayments_recipient_public_data_load_pubkey(ctx, &ge, public_data);
     secp256k1_silentpayments_recipient_public_data_load_input_hash(ctx, &input_hash_scalar, public_data);
     secp256k1_eckey_pubkey_tweak_mul(&ge, &input_hash_scalar);
-    secp256k1_eckey_pubkey_serialize(&ge, output33, &pubkeylen, 1);
+    secp256k1_eckey_pubkey_serialize(&ge, *output, &pubkeylen, 1);
     VERIFY_CHECK(pubkeylen == 33);
     return 1;
 }
 
-int secp256k1_silentpayments_recipient_public_data_parse(const secp256k1_context *ctx, secp256k1_silentpayments_recipient_public_data *public_data, const unsigned char *input33) {
+int secp256k1_silentpayments_recipient_public_data_parse(const secp256k1_context *ctx, secp256k1_silentpayments_recipient_public_data *public_data, const unsigned char (*input)[33]) {
     size_t inputlen = 33;
     secp256k1_ge pk;
 
     VERIFY_CHECK(ctx != NULL);
     ARG_CHECK(public_data != NULL);
-    ARG_CHECK(input33 != NULL);
+    ARG_CHECK(input != NULL);
     /* Since an attacker can send us malicious data that looks like a serialized public key but is not, fail early */
-    if (!secp256k1_eckey_pubkey_parse(&pk, input33, inputlen)) {
+    if (!secp256k1_eckey_pubkey_parse(&pk, *input, inputlen)) {
         return 0;
     }
     /* A serialized public data will always have have the input_hash multiplied in, so we set combined = true.
@@ -538,7 +538,7 @@ int secp256k1_silentpayments_recipient_scan_outputs(
     const secp256k1_context *ctx,
     secp256k1_silentpayments_found_output **found_outputs, size_t *n_found_outputs,
     const secp256k1_xonly_pubkey * const *tx_outputs, size_t n_tx_outputs,
-    const unsigned char *recipient_scan_key32,
+    const unsigned char (*recipient_scan_key)[32],
     const secp256k1_silentpayments_recipient_public_data *public_data,
     const secp256k1_pubkey *recipient_spend_pubkey,
     const secp256k1_silentpayments_label_lookup label_lookup,
@@ -559,7 +559,7 @@ int secp256k1_silentpayments_recipient_scan_outputs(
     ARG_CHECK(n_found_outputs != NULL);
     ARG_CHECK(tx_outputs != NULL);
     ARG_CHECK(n_tx_outputs > 0);
-    ARG_CHECK(recipient_scan_key32 != NULL);
+    ARG_CHECK(recipient_scan_key != NULL);
     ARG_CHECK(public_data != NULL);
     ARG_CHECK(recipient_spend_pubkey != NULL);
     /* Passing a context without a lookup function is non-sensical */
@@ -570,7 +570,7 @@ int secp256k1_silentpayments_recipient_scan_outputs(
      *
      * However, if there is something wrong with the recipient scan key, recipient spend pubkey, or the public data,
      * we fail early and make sure to clear the scan key from memory. */
-    ret = secp256k1_scalar_set_b32_seckey(&rsk_scalar, recipient_scan_key32);
+    ret = secp256k1_scalar_set_b32_seckey(&rsk_scalar, *recipient_scan_key);
     secp256k1_declassify(ctx, &ret, sizeof(ret));
     if (!ret) {
         secp256k1_scalar_clear(&rsk_scalar);
@@ -588,7 +588,7 @@ int secp256k1_silentpayments_recipient_scan_outputs(
         secp256k1_scalar_clear(&rsk_scalar);
         return 0;
     }
-    secp256k1_silentpayments_create_shared_secret(ctx, shared_secret, &rsk_scalar, &A_sum_ge);
+    secp256k1_silentpayments_create_shared_secret(ctx, &shared_secret, &rsk_scalar, &A_sum_ge);
 
     found_idx = 0;
     n_found = 0;
@@ -693,39 +693,39 @@ int secp256k1_silentpayments_recipient_scan_outputs(
     return ret;
 }
 
-int secp256k1_silentpayments_recipient_create_shared_secret(const secp256k1_context *ctx, unsigned char *shared_secret33, const unsigned char *recipient_scan_key32, const secp256k1_silentpayments_recipient_public_data *public_data) {
+int secp256k1_silentpayments_recipient_create_shared_secret(const secp256k1_context *ctx, unsigned char (*shared_secret)[33], const unsigned char (*recipient_scan_key)[32], const secp256k1_silentpayments_recipient_public_data *public_data) {
     secp256k1_scalar rsk;
     secp256k1_ge A_tweaked_ge;
     int ret = 1;
     /* Sanity check inputs */
-    ARG_CHECK(shared_secret33 != NULL);
-    ARG_CHECK(recipient_scan_key32 != NULL);
+    ARG_CHECK(shared_secret != NULL);
+    ARG_CHECK(recipient_scan_key != NULL);
     ARG_CHECK(public_data != NULL);
     ARG_CHECK(public_data->data[4] == 1);
     /* TODO: do we need a _cmov operation here to avoid leaking information about the scan key?
      * Recall: a scan key is not really "secret" data, its functionally the same as an xpub
      */
-    ret &= secp256k1_scalar_set_b32_seckey(&rsk, recipient_scan_key32);
+    ret &= secp256k1_scalar_set_b32_seckey(&rsk, *recipient_scan_key);
     ret &= secp256k1_silentpayments_recipient_public_data_load_pubkey(ctx, &A_tweaked_ge, public_data);
     /* If there are any issues with the recipient scan key or public data, return early */
     secp256k1_declassify(ctx, &ret, sizeof(ret));
     if (!ret) {
         return 0;
     }
-    secp256k1_silentpayments_create_shared_secret(ctx, shared_secret33, &rsk, &A_tweaked_ge);
+    secp256k1_silentpayments_create_shared_secret(ctx, shared_secret, &rsk, &A_tweaked_ge);
 
     /* Explicitly clear secrets */
     secp256k1_scalar_clear(&rsk);
     return ret;
 }
 
-int secp256k1_silentpayments_recipient_create_output_pubkey(const secp256k1_context *ctx, secp256k1_xonly_pubkey *P_output_xonly, const unsigned char *shared_secret33, const secp256k1_pubkey *recipient_spend_pubkey, const uint32_t k)
+int secp256k1_silentpayments_recipient_create_output_pubkey(const secp256k1_context *ctx, secp256k1_xonly_pubkey *P_output_xonly, const unsigned char (*shared_secret)[33], const secp256k1_pubkey *recipient_spend_pubkey, const uint32_t k)
 {
     VERIFY_CHECK(ctx != NULL);
     ARG_CHECK(P_output_xonly != NULL);
-    ARG_CHECK(shared_secret33 != NULL);
+    ARG_CHECK(shared_secret != NULL);
     ARG_CHECK(recipient_spend_pubkey != NULL);
-    return secp256k1_silentpayments_create_output_pubkey(ctx, P_output_xonly, shared_secret33, recipient_spend_pubkey, k);
+    return secp256k1_silentpayments_create_output_pubkey(ctx, P_output_xonly, shared_secret, recipient_spend_pubkey, k);
 }
 
 
