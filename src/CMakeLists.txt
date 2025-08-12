@@ -1,5 +1,65 @@
 add_library(secp256k1)
 
+# HACK: experimental solution for generating test vectors (to match makefile)
+# ---------------------------------------------------------------------------
+#
+# TODO: dry it up, can use a custom function for wrapping the python scripts etc
+# TODO: get rid of shell indirection, as its brittle for cross-compat. could just add an --o <file> arg to all the python scripts
+# TODO: CMake doesnt modify src tree files, but in the old makefile world these files were modifified in tree. seems better to
+#       just have the generated files be stubs in tree, and then they get generated in the build directory? (currently works this way)
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+set(TESTVECTORS)
+
+# ECDSA test vectors (always generated)
+set(ECDSA_TESTVECTOR_HEADER ${CMAKE_CURRENT_BINARY_DIR}/wycheproof/ecdsa_secp256k1_sha256_bitcoin_test.h)
+add_custom_command(
+    OUTPUT ${ECDSA_TESTVECTOR_HEADER}
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/wycheproof
+    COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/tools/tests_wycheproof_generate_ecdsa.py
+            ${PROJECT_SOURCE_DIR}/src/wycheproof/ecdsa_secp256k1_sha256_bitcoin_test.json > ${ECDSA_TESTVECTOR_HEADER}
+    DEPENDS
+        ${PROJECT_SOURCE_DIR}/tools/tests_wycheproof_generate_ecdsa.py
+        ${PROJECT_SOURCE_DIR}/src/wycheproof/ecdsa_secp256k1_sha256_bitcoin_test.json
+    COMMENT "Generating ECDSA test vector header"
+    VERBATIM
+)
+list(APPEND TESTVECTORS ${ECDSA_TESTVECTOR_HEADER})
+
+# ECDH test vectors (only if enabled)
+if(SECP256K1_ENABLE_MODULE_ECDH)
+    set(ECDH_TESTVECTOR_HEADER ${CMAKE_CURRENT_BINARY_DIR}/wycheproof/ecdh_secp256k1_test.h)
+    add_custom_command(
+        OUTPUT ${ECDH_TESTVECTOR_HEADER}
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/wycheproof
+        COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/tools/tests_wycheproof_generate_ecdh.py
+                ${PROJECT_SOURCE_DIR}/src/wycheproof/ecdh_secp256k1_test.json > ${ECDH_TESTVECTOR_HEADER}
+        DEPENDS
+            ${PROJECT_SOURCE_DIR}/tools/tests_wycheproof_generate_ecdh.py
+            ${PROJECT_SOURCE_DIR}/src/wycheproof/ecdh_secp256k1_test.json
+        COMMENT "Generating ECDH test vector header"
+        VERBATIM
+    )
+    list(APPEND TESTVECTORS ${ECDH_TESTVECTOR_HEADER})
+endif()
+
+# Silent payments test vectors (only if enabled)
+if(SECP256K1_ENABLE_MODULE_SILENTPAYMENTS)
+     set(SILENTPAYMENTS_TESTVECTOR_HEADER ${CMAKE_CURRENT_BINARY_DIR}/modules/silentpayments/vectors.h)
+     add_custom_command(
+         OUTPUT ${SILENTPAYMENTS_TESTVECTOR_HEADER}
+         COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/modules/silentpayments
+         COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/tools/tests_silentpayments_generate.py
+                 ${PROJECT_SOURCE_DIR}/src/modules/silentpayments/bip352_send_and_receive_test_vectors.json > ${SILENTPAYMENTS_TESTVECTOR_HEADER}
+         DEPENDS
+             ${PROJECT_SOURCE_DIR}/tools/tests_silentpayments_generate.py
+             ${PROJECT_SOURCE_DIR}/src/modules/silentpayments/bip352_send_and_receive_test_vectors.json
+         COMMENT "Generating Silent payments test vector header"
+         VERBATIM
+     )
+     list(APPEND TESTVECTORS ${SILENTPAYMENTS_TESTVECTOR_HEADER})
+endif()
+
+add_custom_target(testvectors DEPENDS ${TESTVECTORS})
 set_property(TARGET secp256k1 PROPERTY PUBLIC_HEADER
   ${PROJECT_SOURCE_DIR}/include/secp256k1.h
   ${PROJECT_SOURCE_DIR}/include/secp256k1_preallocated.h
@@ -144,11 +204,13 @@ endif()
 
 if(SECP256K1_BUILD_TESTS)
   add_executable(noverify_tests tests.c)
+  add_dependencies(noverify_tests testvectors)
   target_link_libraries(noverify_tests secp256k1_precomputed secp256k1_asm)
   add_test(NAME secp256k1_noverify_tests COMMAND noverify_tests)
   if(NOT CMAKE_BUILD_TYPE STREQUAL "Coverage")
     add_executable(tests tests.c)
     target_compile_definitions(tests PRIVATE VERIFY)
+    add_dependencies(tests testvectors)
     target_link_libraries(tests secp256k1_precomputed secp256k1_asm)
     add_test(NAME secp256k1_tests COMMAND tests)
   endif()
@@ -157,6 +219,7 @@ endif()
 if(SECP256K1_BUILD_EXHAUSTIVE_TESTS)
   # Note: do not include secp256k1_precomputed in exhaustive_tests (it uses runtime-generated tables).
   add_executable(exhaustive_tests tests_exhaustive.c)
+  add_dependencies(exhaustive_tests testvectors)
   target_link_libraries(exhaustive_tests secp256k1_asm)
   target_compile_definitions(exhaustive_tests PRIVATE $<$<NOT:$<CONFIG:Coverage>>:VERIFY>)
   add_test(NAME secp256k1_exhaustive_tests COMMAND exhaustive_tests)
