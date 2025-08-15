@@ -610,6 +610,12 @@ static void test_sha256_eq(const secp256k1_sha256 *sha1, const secp256k1_sha256 
     CHECK(secp256k1_memcmp_var(sha1->s, sha2->s, sizeof(sha1->s)) == 0);
 }
 
+static void sha256_tag_test_internal(secp256k1_sha256 *sha_tagged, unsigned char *tag, size_t taglen) {
+    secp256k1_sha256 sha;
+    secp256k1_sha256_initialize_tagged(&sha, tag, taglen);
+    test_sha256_eq(&sha, sha_tagged);
+}
+
 static void run_hmac_sha256_tests(void) {
     static const char *keys[6] = {
         "\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b",
