@@ -668,6 +668,25 @@ void run_silentpayments_test_vector_receive(const struct bip352_test_vector *tes
     }
 }
 
+static void silentpayments_sha256_tag_test(void) {
+    secp256k1_sha256 sha;
+    {
+        unsigned char tag[] = "BIP0352/Inputs";
+        secp256k1_silentpayments_sha256_init_inputs(&sha);
+        sha256_tag_test_internal(&sha, tag, sizeof(tag) - 1);
+    }
+    {
+        unsigned char tag[] = "BIP0352/SharedSecret";
+        secp256k1_silentpayments_sha256_init_sharedsecret(&sha);
+        sha256_tag_test_internal(&sha, tag, sizeof(tag) - 1);
+    }
+    {
+        unsigned char tag[] = "BIP0352/Label";
+        secp256k1_silentpayments_sha256_init_label(&sha);
+        sha256_tag_test_internal(&sha, tag, sizeof(tag) - 1);
+    }
+}
+
 void run_silentpayments_test_vectors(void) {
     size_t i;
 
@@ -685,6 +704,7 @@ void run_silentpayments_tests(void) {
     test_label_api();
     test_recipient_api();
     run_silentpayments_test_vectors();
+    silentpayments_sha256_tag_test();
 }
 
 #endif
