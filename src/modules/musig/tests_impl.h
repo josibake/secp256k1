@@ -548,12 +548,6 @@ static void musig_nonce_test(void) {
     }
 }
 
-static void sha256_tag_test_internal(secp256k1_sha256 *sha_tagged, unsigned char *tag, size_t taglen) {
-    secp256k1_sha256 sha;
-    secp256k1_sha256_initialize_tagged(&sha, tag, taglen);
-    test_sha256_eq(&sha, sha_tagged);
-}
-
 /* Checks that the initialized tagged hashes have the expected
  * state. */
 static void sha256_tag_test(void) {
