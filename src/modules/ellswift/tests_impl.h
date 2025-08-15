@@ -405,31 +405,22 @@ void run_ellswift_tests(void) {
 
     /* Test hash initializers. */
     {
-        secp256k1_sha256 sha, sha_optimized;
-        static const unsigned char encode_tag[] = {'s', 'e', 'c', 'p', '2', '5', '6', 'k', '1', '_', 'e', 'l', 'l', 's', 'w', 'i', 'f', 't', '_', 'e', 'n', 'c', 'o', 'd', 'e'};
-        static const unsigned char create_tag[] = {'s', 'e', 'c', 'p', '2', '5', '6', 'k', '1', '_', 'e', 'l', 'l', 's', 'w', 'i', 'f', 't', '_', 'c', 'r', 'e', 'a', 't', 'e'};
-        static const unsigned char bip324_tag[] = {'b', 'i', 'p', '3', '2', '4', '_', 'e', 'l', 'l', 's', 'w', 'i', 'f', 't', '_', 'x', 'o', 'n', 'l', 'y', '_', 'e', 'c', 'd', 'h'};
-
-        /* Check that hash initialized by
-         * secp256k1_ellswift_sha256_init_encode has the expected
-         * state. */
-        secp256k1_sha256_initialize_tagged(&sha, encode_tag, sizeof(encode_tag));
-        secp256k1_ellswift_sha256_init_encode(&sha_optimized);
-        test_sha256_eq(&sha, &sha_optimized);
-
-        /* Check that hash initialized by
-         * secp256k1_ellswift_sha256_init_create has the expected
-         * state. */
-        secp256k1_sha256_initialize_tagged(&sha, create_tag, sizeof(create_tag));
-        secp256k1_ellswift_sha256_init_create(&sha_optimized);
-        test_sha256_eq(&sha, &sha_optimized);
-
-        /* Check that hash initialized by
-         * secp256k1_ellswift_sha256_init_bip324 has the expected
-         * state. */
-        secp256k1_sha256_initialize_tagged(&sha, bip324_tag, sizeof(bip324_tag));
-        secp256k1_ellswift_sha256_init_bip324(&sha_optimized);
-        test_sha256_eq(&sha, &sha_optimized);
+        secp256k1_sha256 sha_optimized;
+        {
+            unsigned char tag[] = "secp256k1_ellswift_encode";
+            secp256k1_ellswift_sha256_init_encode(&sha_optimized);
+            sha256_tag_test_internal(&sha_optimized, (unsigned char*)tag, sizeof(tag) - 1);
+        }
+        {
+            unsigned char tag[] = "secp256k1_ellswift_create";
+            secp256k1_ellswift_sha256_init_create(&sha_optimized);
+            sha256_tag_test_internal(&sha_optimized, (unsigned char*)tag, sizeof(tag) - 1);
+        }
+        {
+            unsigned char tag[] = "bip324_ellswift_xonly_ecdh";
+            secp256k1_ellswift_sha256_init_bip324(&sha_optimized);
+            sha256_tag_test_internal(&sha_optimized, (unsigned char*)tag, sizeof(tag) - 1);
+        }
     }
 }
 
