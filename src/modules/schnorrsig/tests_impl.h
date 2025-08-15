@@ -21,11 +21,8 @@ static void nonce_function_bip340_bitflip(unsigned char **args, size_t n_flip, s
 }
 
 static void run_nonce_function_bip340_tests(void) {
-    unsigned char tag[] = {'B', 'I', 'P', '0', '3', '4', '0', '/', 'n', 'o', 'n', 'c', 'e'};
-    unsigned char aux_tag[] = {'B', 'I', 'P', '0', '3', '4', '0', '/', 'a', 'u', 'x'};
     unsigned char algo[] = {'B', 'I', 'P', '0', '3', '4', '0', '/', 'n', 'o', 'n', 'c', 'e'};
     size_t algolen = sizeof(algo);
-    secp256k1_sha256 sha;
     secp256k1_sha256 sha_optimized;
     unsigned char nonce[32], nonce_z[32];
     unsigned char msg[32];
@@ -36,19 +33,17 @@ static void run_nonce_function_bip340_tests(void) {
     unsigned char *args[5];
     int i;
 
-    /* Check that hash initialized by
-     * secp256k1_nonce_function_bip340_sha256_tagged has the expected
-     * state. */
-    secp256k1_sha256_initialize_tagged(&sha, tag, sizeof(tag));
-    secp256k1_nonce_function_bip340_sha256_tagged(&sha_optimized);
-    test_sha256_eq(&sha, &sha_optimized);
-
-   /* Check that hash initialized by
-    * secp256k1_nonce_function_bip340_sha256_tagged_aux has the expected
-    * state. */
-    secp256k1_sha256_initialize_tagged(&sha, aux_tag, sizeof(aux_tag));
-    secp256k1_nonce_function_bip340_sha256_tagged_aux(&sha_optimized);
-    test_sha256_eq(&sha, &sha_optimized);
+    /* Check that the initialized tagged hashes have the expected state */
+    {
+        unsigned char tag[] = "BIP0340/nonce";
+        secp256k1_nonce_function_bip340_sha256_tagged(&sha_optimized);
+        sha256_tag_test_internal(&sha_optimized, tag, sizeof(tag) - 1);
+    }
+    {
+        unsigned char tag[] = "BIP0340/aux";
+        secp256k1_nonce_function_bip340_sha256_tagged_aux(&sha_optimized);
+        sha256_tag_test_internal(&sha_optimized, tag, sizeof(tag) - 1);
+    }
 
     testrand256(msg);
     testrand256(key);
@@ -158,13 +153,11 @@ static void test_schnorrsig_api(void) {
 /* Checks that hash initialized by secp256k1_schnorrsig_sha256_tagged has the
  * expected state. */
 static void test_schnorrsig_sha256_tagged(void) {
-    unsigned char tag[] = {'B', 'I', 'P', '0', '3', '4', '0', '/', 'c', 'h', 'a', 'l', 'l', 'e', 'n', 'g', 'e'};
-    secp256k1_sha256 sha;
+    unsigned char tag[] = "BIP0340/challenge";
     secp256k1_sha256 sha_optimized;
 
-    secp256k1_sha256_initialize_tagged(&sha, (unsigned char *) tag, sizeof(tag));
     secp256k1_schnorrsig_sha256_tagged(&sha_optimized);
-    test_sha256_eq(&sha, &sha_optimized);
+    sha256_tag_test_internal(&sha_optimized, tag, sizeof(tag) - 1);
 }
 
 /* Helper function for schnorrsig_bip_vectors
