@@ -12,9 +12,6 @@ import hashlib
 import json
 import sys
 
-import bech32m
-import ripemd160
-
 NUMS_H = bytes.fromhex("50929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0")
 MAX_INPUTS_PER_TEST_CASE = 3
 MAX_OUTPUTS_PER_TEST_CASE = 4
@@ -23,61 +20,33 @@ MAX_PERMUTATIONS_PER_SENDING_TEST_CASE = 12
 def sha256(s):
     return hashlib.sha256(s).digest()
 
-def hash160(s):
-    return ripemd160.ripemd160(sha256(s))
-
 def smallest_outpoint(outpoints):
     serialized_outpoints = [bytes.fromhex(txid)[::-1] + n.to_bytes(4, 'little') for txid, n in outpoints]
     return sorted(serialized_outpoints)[0]
 
-def decode_silent_payments_address(address):
-    _, data = bech32m.decode("sp", address)
-    data = bytes(data)  # convert from list to bytes
-    assert len(data) == 66
-    return data[:33], data[33:]
-
 def is_p2tr(s):  # OP_1 OP_PUSHBYTES_32 <32 bytes>
     return (len(s) == 34) and (s[0] == 0x51) and (s[1] == 0x20)
 
-def is_p2wpkh(s):  # OP_0 OP_PUSHBYTES_20 <20 bytes>
-    return (len(s) == 22) and (s[0] == 0x00) and (s[1] == 0x14)
+def get_pubkey_from_input(input_data, pub_key_hex):
+    """Extract the correct pubkey for an input, handling NUMS_H filtering and format conversion"""
+    spk = bytes.fromhex(input_data['prevout']['scriptPubKey']['hex'])
+    pub_key = bytes.fromhex(pub_key_hex)
+    
+    if is_p2tr(spk):  # taproot input
+        # Check for NUMS_H in witness (should be skipped)
+        witness = bytes.fromhex(input_data.get('txinwitness', ''))
+        # Parse witness stack
+        witness_stack = []
+        no_witness_items = 0
+        if len(witness) > 0:
+            no_witness_items = witness[0]
+            witness = witness[1:]
+        for i in range(no_witness_items):
+            item_len = witness[0]
+            witness_stack.append(witness[1:item_len+1])
+            witness = witness[item_len+1:]
 
-def is_p2sh(s):  # OP_HASH160 OP_PUSHBYTES_20 <20 bytes> OP_EQUAL
-    return (len(s) == 23) and (s[0] == 0xA9) and (s[1] == 0x14) and (s[-1] == 0x87)
-
-def is_p2pkh(s):  # OP_DUP OP_HASH160 OP_PUSHBYTES_20 <20 bytes> OP_EQUALVERIFY OP_CHECKSIG
-    return (len(s) == 25) and (s[0] == 0x76) and (s[1] == 0xA9) and (s[2] == 0x14) and \
-        (s[-2] == 0x88) and (s[-1] == 0xAC)
-
-def get_pubkey_from_input(spk, script_sig, witness):
-    # build witness stack from raw witness data
-    witness_stack = []
-    no_witness_items = 0
-    if len(witness) > 0:
-        no_witness_items = witness[0]
-        witness = witness[1:]
-    for i in range(no_witness_items):
-        item_len = witness[0]
-        witness_stack.append(witness[1:item_len+1])
-        witness = witness[item_len+1:]
-
-    if is_p2pkh(spk):
-        spk_pkh = spk[3:3 + 20]
-        for i in range(len(script_sig), 0, -1):
-            if i - 33 >= 0:
-                pk = script_sig[i - 33:i]
-                if hash160(pk) == spk_pkh:
-                    return pk
-    elif is_p2sh(spk) and is_p2wpkh(script_sig[1:]):
-        pubkey = witness_stack[-1]
-        if len(pubkey) == 33:
-            return pubkey
-    elif is_p2wpkh(spk):
-        # the witness must contain two items and the second item is the pubkey
-        pubkey = witness_stack[-1]
-        if len(pubkey) == 33:
-            return pubkey
-    elif is_p2tr(spk):
+        # Check for script-path spend with NUMS_H
         if len(witness_stack) > 1 and witness_stack[-1][0] == 0x50:
             witness_stack.pop()
         if len(witness_stack) > 1:  # script-path spend?
@@ -85,9 +54,13 @@ def get_pubkey_from_input(spk, script_sig, witness):
             internal_key = control_block[1:33]
             if internal_key == NUMS_H:  # skip
                 return b''
-        return spk[2:]
-
-    return b''
+        
+        # Convert to x-only (32 bytes) for taproot
+        if len(pub_key) == 33:
+            pub_key = pub_key[1:]  # Remove prefix byte
+        return pub_key
+    else:  # regular input - use full compressed pubkey (33 bytes)
+        return pub_key
 
 def to_c_array(x):
     if x == "":
@@ -111,19 +84,23 @@ def emit_key_material(comment, keys, include_count=False):
         out += ",\n"
     out +=  "        },\n"
 
-def emit_recipient_addr_material(recipient_addresses):
+def emit_recipient_addr_material(recipients):
     global out
-    out += f"        {len(recipient_addresses)}," + "\n"
+    out += f"        {len(recipients)}," + "\n"
     out +=  "        { /* recipient pubkeys (address data) */\n"
+    
     for i in range(MAX_OUTPUTS_PER_TEST_CASE):
         out += "            {\n"
-        if i < len(recipient_addresses):
-            B_scan, B_spend = decode_silent_payments_address(recipient_addresses[i])
+        if i < len(recipients):
+            # Use the scan_pub_key and spend_pub_key directly from the recipient
+            scan_pubkey = bytes.fromhex(recipients[i]['scan_pub_key'])
+            spend_pubkey = bytes.fromhex(recipients[i]['spend_pub_key'])
+            
             out += "                {"
-            out += to_c_array(B_scan.hex())
+            out += to_c_array(scan_pubkey.hex())
             out += "},\n"
             out += "                {"
-            out += to_c_array(B_spend.hex())
+            out += to_c_array(spend_pubkey.hex())
             out += "},\n"
         else:
             out += '                "",\n'
@@ -189,16 +166,24 @@ for test_nr, test_vector in enumerate(test_vectors):
     input_plain_pubkeys = []
     input_xonly_pubkeys = []
     outpoints = []
+    
+    pubkey_index = 0
+    input_pub_keys_hex = test_vector['sending'][0]['expected']['input_pub_keys']
+    
     for i in test_vector['sending'][0]['given']['vin']:
-        pub_key = get_pubkey_from_input(bytes.fromhex(i['prevout']['scriptPubKey']['hex']),
-            bytes.fromhex(i['scriptSig']), bytes.fromhex(i['txinwitness']))
-        if len(pub_key) == 33:  # regular input
-            input_plain_seckeys.append(i['private_key'])
-            input_plain_pubkeys.append(pub_key.hex())
-        elif len(pub_key) == 32:  # taproot input
-            input_taproot_seckeys.append(i['private_key'])
-            input_xonly_pubkeys.append(pub_key.hex())
         outpoints.append((i['txid'], i['vout']))
+        
+        if pubkey_index < len(input_pub_keys_hex):
+            pub_key = get_pubkey_from_input(i, input_pub_keys_hex[pubkey_index])
+            if len(pub_key) == 33:  # regular input
+                input_plain_seckeys.append(i['private_key'])
+                input_plain_pubkeys.append(pub_key.hex())
+                pubkey_index += 1
+            elif len(pub_key) == 32:  # taproot input
+                input_taproot_seckeys.append(i['private_key'])
+                input_xonly_pubkeys.append(pub_key.hex())
+                pubkey_index += 1
+            # len(pub_key) == 0, it's a NUMS_H input - skip without incrementing
     if len(input_plain_pubkeys) == 0 and len(input_xonly_pubkeys) == 0:
         continue
 
