@@ -92,15 +92,14 @@ def emit_recipient_addr_material(recipients):
     for i in range(MAX_OUTPUTS_PER_TEST_CASE):
         out += "            {\n"
         if i < len(recipients):
-            # Use the scan_pub_key and spend_pub_key directly from the recipient
-            scan_pubkey = bytes.fromhex(recipients[i]['scan_pub_key'])
-            spend_pubkey = bytes.fromhex(recipients[i]['spend_pub_key'])
+            B_scan = bytes.fromhex(recipients[i]['scan_pub_key'])
+            B_spend = bytes.fromhex(recipients[i]['spend_pub_key'])
             
             out += "                {"
-            out += to_c_array(scan_pubkey.hex())
+            out += to_c_array(B_scan.hex())
             out += "},\n"
             out += "                {"
-            out += to_c_array(spend_pubkey.hex())
+            out += to_c_array(B_spend.hex())
             out += "},\n"
         else:
             out += '                "",\n'
@@ -166,13 +165,10 @@ for test_nr, test_vector in enumerate(test_vectors):
     input_plain_pubkeys = []
     input_xonly_pubkeys = []
     outpoints = []
-    
     pubkey_index = 0
     input_pub_keys_hex = test_vector['sending'][0]['expected']['input_pub_keys']
     
     for i in test_vector['sending'][0]['given']['vin']:
-        outpoints.append((i['txid'], i['vout']))
-        
         if pubkey_index < len(input_pub_keys_hex):
             pub_key = get_pubkey_from_input(i, input_pub_keys_hex[pubkey_index])
             if len(pub_key) == 33:  # regular input
@@ -183,7 +179,7 @@ for test_nr, test_vector in enumerate(test_vectors):
                 input_taproot_seckeys.append(i['private_key'])
                 input_xonly_pubkeys.append(pub_key.hex())
                 pubkey_index += 1
-            # len(pub_key) == 0, it's a NUMS_H input - skip without incrementing
+        outpoints.append((i['txid'], i['vout']))
     if len(input_plain_pubkeys) == 0 and len(input_xonly_pubkeys) == 0:
         continue
 
