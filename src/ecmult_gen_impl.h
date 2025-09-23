@@ -51,7 +51,7 @@ static void secp256k1_ecmult_gen_scalar_diff(secp256k1_scalar* diff) {
     secp256k1_scalar_add(diff, diff, &neghalf);
 }
 
-static void secp256k1_ecmult_gen(const secp256k1_ecmult_gen_context *ctx, secp256k1_gej *r, const secp256k1_scalar *gn) {
+static void secp256k1_ecmult_gen_any(const secp256k1_ecmult_gen_context *ctx, secp256k1_gej *r, const secp256k1_scalar *gn, const secp256k1_ge_storage (*prec)[COMB_POINTS]) {
     uint32_t comb_off;
     secp256k1_ge add;
     secp256k1_fe neg;
@@ -245,7 +245,7 @@ static void secp256k1_ecmult_gen(const secp256k1_ecmult_gen_context *ctx, secp25
              *    (https://eprint.iacr.org/2005/271.pdf)
              */
             for (index = 0; index < COMB_POINTS; ++index) {
-                secp256k1_ge_storage_cmov(&adds, &secp256k1_ecmult_gen_prec_table[block][index], index == abs);
+                secp256k1_ge_storage_cmov(&adds, &prec[block][index], index == abs);
             }
 
             /* Set add=adds or add=-adds, in constant time, based on sign. */
@@ -279,6 +279,10 @@ static void secp256k1_ecmult_gen(const secp256k1_ecmult_gen_context *ctx, secp25
     secp256k1_ge_clear(&add);
     secp256k1_memclear_explicit(&adds, sizeof(adds));
     secp256k1_memclear_explicit(&recoded, sizeof(recoded));
+}
+
+static void secp256k1_ecmult_gen(const secp256k1_ecmult_gen_context *ctx, secp256k1_gej *r, const secp256k1_scalar *gn) {
+    secp256k1_ecmult_gen_any(ctx, r, gn, (const secp256k1_ge_storage (*)[COMB_POINTS])secp256k1_ecmult_gen_prec_table);
 }
 
 /* Setup blinding values for secp256k1_ecmult_gen. */
