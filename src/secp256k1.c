@@ -521,8 +521,9 @@ static int nonce_function_rfc6979_impl(const secp256k1_hash_ctx *hash_ctx, unsig
        buffer_append(keydata, &offset, algo16, 16);
    }
    secp256k1_rfc6979_hmac_sha256_initialize(hash_ctx, &rng, keydata, offset);
-   for (i = 0; i <= counter; i++) {
+   for (i = 0; ; i++) {
        secp256k1_rfc6979_hmac_sha256_generate(hash_ctx, &rng, nonce32, 32);
+       if (i == counter) break;
    }
    secp256k1_rfc6979_hmac_sha256_finalize(&rng);
 
