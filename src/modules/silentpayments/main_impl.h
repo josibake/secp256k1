@@ -713,6 +713,15 @@ int secp256k1_silentpayments_recipient_scan_outputs(
             if (secp256k1_xonly_pubkey_cmp(ctx, &unlabeled_output_xonly, tx_outputs[j]) == 0) {
                 label_tweak = NULL;
                 found_idx = j;
+                /* An earlier label match takes precedence over this direct match. */
+                if (label_batch_idx > 0) {
+                    int label_found_idx = secp256k1_silentpayments_check_label_batch(
+                        &label_ge, &label_tweak, label_candidates_gej, label_batch_idx,
+                        j - label_batch_idx, label_lookup, label_context);
+                    if (label_found_idx != -1) {
+                        found_idx = label_found_idx;
+                    }
+                }
                 break;
             }
 

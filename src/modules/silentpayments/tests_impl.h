@@ -601,6 +601,70 @@ static void test_recipient_api(void) {
     CHECK_ILLEGAL(CTX, secp256k1_silentpayments_recipient_scan_outputs(CTX, fp, &n_f, tp, 1, ALICE_SECKEY, &ps, &p, NULL, NULL));
 }
 
+static void test_recipient_scan_label_precedes_direct_match(void) {
+    static const unsigned char sender_seckey[32] = { 1 };
+    static const unsigned char scan_seckey[32] = { 2 };
+    static const unsigned char spend_seckey[32] = { 3 };
+    secp256k1_pubkey sender_pubkey, scan_pubkey, unlabeled_spend_pubkey, labeled_spend_pubkey;
+    const secp256k1_pubkey *prevout_pubkeys[1];
+    const unsigned char *sender_seckeys[1];
+    secp256k1_silentpayments_prevouts_summary prevouts_summary;
+    secp256k1_silentpayments_label label;
+    secp256k1_silentpayments_recipient recipient;
+    const secp256k1_silentpayments_recipient *recipients[1];
+    secp256k1_xonly_pubkey labeled_output, direct_output;
+    secp256k1_xonly_pubkey *generated_outputs[1];
+    const secp256k1_xonly_pubkey *tx_outputs[2];
+    secp256k1_silentpayments_found_output found_output[2];
+    secp256k1_silentpayments_found_output *found_outputs[2];
+    struct labels_cache cache;
+    unsigned char found_label[33];
+    uint32_t n_found_outputs;
+
+    CHECK(secp256k1_ec_pubkey_create(CTX, &sender_pubkey, sender_seckey));
+    CHECK(secp256k1_ec_pubkey_create(CTX, &scan_pubkey, scan_seckey));
+    CHECK(secp256k1_ec_pubkey_create(CTX, &unlabeled_spend_pubkey, spend_seckey));
+    prevout_pubkeys[0] = &sender_pubkey;
+    sender_seckeys[0] = sender_seckey;
+    CHECK(secp256k1_silentpayments_recipient_prevouts_summary_create(
+        CTX, &prevouts_summary, SMALLEST_OUTPOINT, NULL, 0, prevout_pubkeys, 1));
+
+    memset(&cache, 0, sizeof(cache));
+    CHECK(secp256k1_silentpayments_recipient_label_create(
+        CTX, &label, cache.entries[0].label_tweak, scan_seckey, 1));
+    CHECK(secp256k1_silentpayments_recipient_label_serialize(CTX, cache.entries[0].label, &label));
+    cache.entries_used = 1;
+    CHECK(secp256k1_silentpayments_recipient_create_labeled_spend_pubkey(
+        CTX, &labeled_spend_pubkey, &unlabeled_spend_pubkey, &label));
+
+    recipient.scan_pubkey = scan_pubkey;
+    recipient.spend_pubkey = labeled_spend_pubkey;
+    recipient.index = 0;
+    recipients[0] = &recipient;
+    /* Produce two k = 0 outputs, with the labeled output first. */
+    generated_outputs[0] = &labeled_output;
+    CHECK(secp256k1_silentpayments_sender_create_outputs(
+        CTX, generated_outputs, recipients, 1, SMALLEST_OUTPOINT, NULL, 0, sender_seckeys, 1));
+    recipient.spend_pubkey = unlabeled_spend_pubkey;
+    generated_outputs[0] = &direct_output;
+    CHECK(secp256k1_silentpayments_sender_create_outputs(
+        CTX, generated_outputs, recipients, 1, SMALLEST_OUTPOINT, NULL, 0, sender_seckeys, 1));
+    CHECK(secp256k1_xonly_pubkey_cmp(CTX, &labeled_output, &direct_output) != 0);
+
+    tx_outputs[0] = &labeled_output;
+    tx_outputs[1] = &direct_output;
+    found_outputs[0] = &found_output[0];
+    found_outputs[1] = &found_output[1];
+    CHECK(secp256k1_silentpayments_recipient_scan_outputs(
+        CTX, found_outputs, &n_found_outputs, tx_outputs, 2, scan_seckey, &prevouts_summary,
+        &unlabeled_spend_pubkey, label_lookup, &cache));
+    CHECK(n_found_outputs == 1);
+    CHECK(secp256k1_xonly_pubkey_cmp(CTX, &found_output[0].output, &labeled_output) == 0);
+    CHECK(found_output[0].found_with_label);
+    CHECK(secp256k1_silentpayments_recipient_label_serialize(CTX, found_label, &found_output[0].label));
+    CHECK(secp256k1_memcmp_var(found_label, cache.entries[0].label, sizeof(found_label)) == 0);
+}
+
 void run_silentpayments_test_vector_send(const struct bip352_test_vector *test) {
     static secp256k1_silentpayments_recipient recipients[MAX_OUTPUTS_PER_TEST_CASE];
     static const secp256k1_silentpayments_recipient *recipient_ptrs[MAX_OUTPUTS_PER_TEST_CASE];
@@ -861,6 +925,7 @@ static const struct tf_test_entry tests_silentpayments[] = {
     CASE1(test_send_api),
     CASE1(test_label_api),
     CASE1(test_recipient_api),
+    CASE1(test_recipient_scan_label_precedes_direct_match),
     CASE1(run_silentpayments_test_vectors),
     CASE1(silentpayments_sha256_tag_test),
 };
