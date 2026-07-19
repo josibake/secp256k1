@@ -562,6 +562,44 @@ int secp256k1_silentpayments_recipient_prevouts_summary_create(
     return 1;
 }
 
+/* Label scanning involves the transformation from Jacobian (gej) to affine (ge) coordinates
+ * for serializing label candidates. As this is an expensive operation involving modular
+ * inversion, we don't do this one by one for each tx output, but collect multiple label
+ * candidates in Jacobian in order to apply Montgomery's trick for batch inversion (using
+ * the function `secp256k1_ge_set_all_gej_var`). For transactions with a large number of
+ * outputs, this speeds up scanning significantly (~2.5x). */
+enum { LABEL_BATCH_SIZE = 8 }; /* batch size expressed in number of tx outputs */
+
+/* Check the label cache for each pair of candidates in a batch.
+ * Returns the first matching tx output index, or -1 if none has a matching label. */
+static int secp256k1_silentpayments_check_label_batch(
+    secp256k1_ge *label_ge,
+    const unsigned char **label_tweak,
+    const secp256k1_gej *label_candidates_gej,
+    size_t n_batch,
+    size_t j_start,
+    secp256k1_silentpayments_label_lookup label_lookup,
+    const void *label_context
+) {
+    secp256k1_ge label_candidates_ge[2 * LABEL_BATCH_SIZE];
+    unsigned char label33[33];
+    size_t i;
+
+    *label_tweak = NULL;
+    secp256k1_ge_set_all_gej_var(label_candidates_ge, label_candidates_gej, 2 * n_batch);
+    for (i = 0; i < 2 * n_batch; i++) {
+        /* Serialize only non-infinity points because candidates are collected only when
+         * tx_output != unlabeled_output_xonly. */
+        secp256k1_eckey_pubkey_serialize33(&label_candidates_ge[i], label33);
+        *label_tweak = label_lookup(label33, label_context);
+        if (*label_tweak != NULL) {
+            *label_ge = label_candidates_ge[i];
+            return (int)(j_start + i / 2);
+        }
+    }
+    return -1;
+}
+
 int secp256k1_silentpayments_recipient_scan_outputs(
     const secp256k1_context *ctx,
     secp256k1_silentpayments_found_output **found_outputs, uint32_t *n_found_outputs,
@@ -637,13 +675,6 @@ int secp256k1_silentpayments_recipient_scan_outputs(
         secp256k1_xonly_pubkey unlabeled_output_xonly;
         secp256k1_ge unlabeled_output_ge = unlabeled_spend_pubkey_ge;
         secp256k1_ge unlabeled_output_negated_ge;
-        /* Label scanning involves the transformation from Jacobian (gej) to affine (ge) coordinates
-         * for serializing label candidates. As this is an expensive operation involving modular
-         * inversion, we don't do this one by one for each tx output, but collect multiple label
-         * candidates in Jacobian in order to apply Montgomery's trick for batch inversion (using
-         * the function `secp256k1_ge_set_all_gej_var`). For transactions with a large number of
-         * outputs, this speeds up scanning significantly (~2.5x). */
-        enum { LABEL_BATCH_SIZE = 8 }; /* batch size expressed in number of tx outputs */
         secp256k1_gej label_candidates_gej[2 * LABEL_BATCH_SIZE]; /* two candidates per tx output (one per y-parity) */
         size_t label_batch_idx = 0; /* current index within a batch */
         const unsigned char *label_tweak = NULL;
@@ -704,33 +735,9 @@ int secp256k1_silentpayments_recipient_scan_outputs(
                 /* If the batch is filled or we have reached the last transaction output, perform batch
                  * inversion and check the label cache for each label candidate entry in the batch */
                 if (label_batch_idx == LABEL_BATCH_SIZE || j == (n_tx_outputs-1)) {
-                    secp256k1_ge label_candidates_ge[2 * LABEL_BATCH_SIZE];
-                    unsigned char label33[33];
-                    size_t j_start = j + 1 - label_batch_idx; /* tx outputs index that matches the first batch entry */
-
-                    secp256k1_ge_set_all_gej_var(label_candidates_ge, label_candidates_gej, 2 * label_batch_idx);
-                    for (i = 0; i < label_batch_idx; i++) {
-                        /* Note: serialize will only fail if label_ge is the point at infinity, but we know this
-                         * cannot happen since we only hit this branch if tx_output != unlabeled_output_xonly.
-                         * Thus, we know that label_ge = tx_output_gej + unlabeled_output_negated_ge cannot be the
-                         * point at infinity.
-                         */
-                        secp256k1_eckey_pubkey_serialize33(&label_candidates_ge[2 * i], label33);
-                        label_tweak = label_lookup(label33, label_context);
-                        if (label_tweak != NULL) {
-                            found_idx = j_start + i;
-                            label_ge = label_candidates_ge[2 * i];
-                            break;
-                        }
-
-                        secp256k1_eckey_pubkey_serialize33(&label_candidates_ge[2 * i + 1], label33);
-                        label_tweak = label_lookup(label33, label_context);
-                        if (label_tweak != NULL) {
-                            found_idx = j_start + i;
-                            label_ge = label_candidates_ge[2 * i + 1];
-                            break;
-                        }
-                    }
+                    found_idx = secp256k1_silentpayments_check_label_batch(
+                        &label_ge, &label_tweak, label_candidates_gej, label_batch_idx,
+                        j + 1 - label_batch_idx, label_lookup, label_context);
                     label_batch_idx = 0;
                 }
                 if (found_idx != -1) {
