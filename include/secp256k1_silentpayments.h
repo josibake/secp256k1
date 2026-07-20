@@ -348,8 +348,6 @@ typedef struct secp256k1_silentpayments_found_output {
  *  Scanning is bounded by SECP256K1_SILENTPAYMENTS_RECIPIENT_GROUP_LIMIT and may
  *  miss outputs if a transaction contains more outputs for a single scan public
  *  key group than this limit.
- *  It's recommended to shuffle `tx_outputs` before calling this function to ensure
- *  runtime is not affected by the ordering of the outputs.
  *
  *  Returns: 1 if output scanning was successful.
  *           0 if the transaction is not a Silent Payments transaction,
@@ -364,7 +362,8 @@ typedef struct secp256k1_silentpayments_found_output {
  *                               represents the number of outputs found while
  *                               scanning (0 if none are found). Can't be larger than
  *                               SECP256K1_SILENTPAYMENTS_RECIPIENT_GROUP_LIMIT.
- *  In:              tx_outputs: pointer to the transaction's x-only public key outputs
+ *  In:              tx_outputs: pointer to the transaction's x-only public key outputs,
+ *                               in their original transaction (vout) order
  *                 n_tx_outputs: the size of the tx_outputs array.
  *                   scan_key32: pointer to the recipient's 32 byte scan key. The scan
  *                               key is valid if it passes secp256k1_ec_seckey_verify
