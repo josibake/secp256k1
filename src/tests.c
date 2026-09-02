@@ -6660,7 +6660,7 @@ static void run_ecdsa_sign_verify(void) {
 }
 
 static void run_ecdsa_verify_many(void) {
-    enum { N_SIGS = 67 };
+    enum { N_SIGS = 129 };
     secp256k1_ecdsa_signature sigs[N_SIGS];
     unsigned char msghashes32[N_SIGS][32];
     secp256k1_pubkey pubkeys[N_SIGS];
@@ -6689,6 +6689,10 @@ static void run_ecdsa_verify_many(void) {
     }
     memset(&sigs[2], 0, sizeof(sigs[2]));
     pubkeys[3] = pubkeys[4];
+    CHECK(secp256k1_ecdsa_verify_many(CTX, results, sigs, &msghashes32[0][0], pubkeys, N_SIGS));
+    for (i = 0; i < N_SIGS; ++i) {
+        CHECK(results[i] == secp256k1_ecdsa_verify(CTX, &sigs[i], msghashes32[i], &pubkeys[i]));
+    }
     CHECK(secp256k1_ecdsa_verify_many(STATIC_CTX, results, sigs, &msghashes32[0][0], pubkeys, N_SIGS));
     for (i = 0; i < N_SIGS; i++) {
         CHECK(results[i] == secp256k1_ecdsa_verify(STATIC_CTX, &sigs[i], msghashes32[i], &pubkeys[i]));

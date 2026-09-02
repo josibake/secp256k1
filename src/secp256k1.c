@@ -38,6 +38,8 @@
 #include "selftest.h"
 #include "hsort_impl.h"
 
+#include "ecdsa_ifma_config.h"
+
 #ifdef SECP256K1_NO_BUILD
 # error "secp256k1.h processed without SECP256K1_BUILD defined while building secp256k1.c"
 #endif
@@ -396,6 +398,10 @@ static void secp256k1_ecdsa_signature_load_inverse_many(const secp256k1_context*
     secp256k1_ecdsa_sig_inverse_var_many(s_inv, s, n_sigs);
 }
 
+#ifdef SECP256K1_ECDSA_VERIFY_MANY_IFMA
+#include "ecdsa_ifma_impl.h"
+#endif
+
 int secp256k1_ecdsa_signature_parse_der(const secp256k1_context* ctx, secp256k1_ecdsa_signature* sig, const unsigned char *input, size_t inputlen) {
     secp256k1_scalar r, s;
 
@@ -495,18 +501,11 @@ int secp256k1_ecdsa_verify(const secp256k1_context* ctx, const secp256k1_ecdsa_s
 
 #define SECP256K1_ECDSA_VERIFY_MANY_TILE_SIZE 64
 
-int secp256k1_ecdsa_verify_many(const secp256k1_context* ctx, unsigned char *results, const secp256k1_ecdsa_signature *sigs, const unsigned char *msghashes32, const secp256k1_pubkey *pubkeys, size_t n_sigs) {
+static int secp256k1_ecdsa_verify_many_portable(const secp256k1_context* ctx, unsigned char *results, const secp256k1_ecdsa_signature *sigs, const unsigned char *msghashes32, const secp256k1_pubkey *pubkeys, size_t n_sigs) {
     secp256k1_scalar sigr[SECP256K1_ECDSA_VERIFY_MANY_TILE_SIZE];
     secp256k1_scalar sigs_value[SECP256K1_ECDSA_VERIFY_MANY_TILE_SIZE];
     secp256k1_scalar sigs_inverse[SECP256K1_ECDSA_VERIFY_MANY_TILE_SIZE];
     size_t tile_start;
-
-    VERIFY_CHECK(ctx != NULL);
-    ARG_CHECK(results != NULL);
-    ARG_CHECK(sigs != NULL);
-    ARG_CHECK(msghashes32 != NULL);
-    ARG_CHECK(pubkeys != NULL);
-    ARG_CHECK(n_sigs > 0);
 
     for (tile_start = 0; tile_start < n_sigs; tile_start += SECP256K1_ECDSA_VERIFY_MANY_TILE_SIZE) {
         size_t tile_size = n_sigs - tile_start;
@@ -527,6 +526,23 @@ int secp256k1_ecdsa_verify_many(const secp256k1_context* ctx, unsigned char *res
         }
     }
     return 1;
+}
+
+int secp256k1_ecdsa_verify_many(const secp256k1_context* ctx, unsigned char *results, const secp256k1_ecdsa_signature *sigs, const unsigned char *msghashes32, const secp256k1_pubkey *pubkeys, size_t n_sigs) {
+    VERIFY_CHECK(ctx != NULL);
+    ARG_CHECK(results != NULL);
+    ARG_CHECK(sigs != NULL);
+    ARG_CHECK(msghashes32 != NULL);
+    ARG_CHECK(pubkeys != NULL);
+    ARG_CHECK(n_sigs > 0);
+
+#ifdef SECP256K1_ECDSA_VERIFY_MANY_IFMA
+    if (n_sigs >= SECP256K1_ECDSA_IFMA_LANES) {
+        secp256k1_ecdsa_ifma_verify_many(ctx, results, sigs, msghashes32, pubkeys, n_sigs);
+        return 1;
+    }
+#endif
+    return secp256k1_ecdsa_verify_many_portable(ctx, results, sigs, msghashes32, pubkeys, n_sigs);
 }
 
 #undef SECP256K1_ECDSA_VERIFY_MANY_TILE_SIZE

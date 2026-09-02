@@ -19,7 +19,10 @@ noinst_HEADERS += src/scalar_low_impl.h
 noinst_HEADERS += src/group.h
 noinst_HEADERS += src/group_impl.h
 noinst_HEADERS += src/ecdsa.h
+noinst_HEADERS += src/ecdsa_ifma_config.h
 noinst_HEADERS += src/ecdsa_impl.h
+noinst_HEADERS += src/ecdsa_ifma.h
+noinst_HEADERS += src/ecdsa_ifma_impl.h
 noinst_HEADERS += src/eckey.h
 noinst_HEADERS += src/eckey_impl.h
 noinst_HEADERS += src/ecmult.h
@@ -66,6 +69,7 @@ noinst_HEADERS += src/hash.h
 noinst_HEADERS += src/hash_impl.h
 noinst_HEADERS += src/field.h
 noinst_HEADERS += src/field_impl.h
+noinst_HEADERS += src/precomputed_ecdsa_ifma.h
 noinst_HEADERS += src/bench.h
 noinst_HEADERS += src/wycheproof/ecdsa_secp256k1_sha256_bitcoin_test.h
 noinst_HEADERS += src/hsort.h
@@ -224,7 +228,7 @@ endif
 endif
 
 ### Precomputed tables
-EXTRA_PROGRAMS = precompute_ecmult precompute_ecmult_gen
+EXTRA_PROGRAMS = precompute_ecmult precompute_ecmult_gen precompute_ecdsa_ifma
 CLEANFILES = $(EXTRA_PROGRAMS)
 
 precompute_ecmult_SOURCES = src/precompute_ecmult.c
@@ -234,6 +238,10 @@ precompute_ecmult_LDADD = $(COMMON_LIB)
 precompute_ecmult_gen_SOURCES = src/precompute_ecmult_gen.c
 precompute_ecmult_gen_CPPFLAGS = $(SECP_CONFIG_DEFINES) -DVERIFY
 precompute_ecmult_gen_LDADD = $(COMMON_LIB)
+
+precompute_ecdsa_ifma_SOURCES = src/precompute_ecdsa_ifma.c
+precompute_ecdsa_ifma_CPPFLAGS = $(SECP_CONFIG_DEFINES) -DVERIFY
+precompute_ecdsa_ifma_LDADD = $(COMMON_LIB)
 
 # See Automake manual, Section "Errors with distclean".
 # We don't list any dependencies for the prebuilt files here because
