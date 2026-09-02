@@ -6659,6 +6659,48 @@ static void run_ecdsa_sign_verify(void) {
     }
 }
 
+static void run_ecdsa_verify_many(void) {
+    enum { N_SIGS = 67 };
+    secp256k1_ecdsa_signature sigs[N_SIGS];
+    unsigned char msghashes32[N_SIGS][32];
+    secp256k1_pubkey pubkeys[N_SIGS];
+    unsigned char results[N_SIGS];
+    unsigned char seckey[32];
+    size_t i;
+
+    for (i = 0; i < N_SIGS; i++) {
+        testutil_random_scalar_order_b32(seckey);
+        testrand256(msghashes32[i]);
+        CHECK(secp256k1_ec_pubkey_create(CTX, &pubkeys[i], seckey));
+        CHECK(secp256k1_ecdsa_sign(CTX, &sigs[i], msghashes32[i], seckey, NULL, NULL));
+    }
+    CHECK(secp256k1_ecdsa_verify_many(CTX, results, sigs, &msghashes32[0][0], pubkeys, N_SIGS));
+    for (i = 0; i < N_SIGS; i++) {
+        CHECK(results[i] == secp256k1_ecdsa_verify(CTX, &sigs[i], msghashes32[i], &pubkeys[i]));
+    }
+
+    msghashes32[0][0] ^= 1;
+    {
+        secp256k1_scalar r;
+        secp256k1_scalar s;
+        secp256k1_ecdsa_signature_load(CTX, &r, &s, &sigs[1]);
+        secp256k1_scalar_negate(&s, &s);
+        secp256k1_ecdsa_signature_save(&sigs[1], &r, &s);
+    }
+    memset(&sigs[2], 0, sizeof(sigs[2]));
+    pubkeys[3] = pubkeys[4];
+    CHECK(secp256k1_ecdsa_verify_many(STATIC_CTX, results, sigs, &msghashes32[0][0], pubkeys, N_SIGS));
+    for (i = 0; i < N_SIGS; i++) {
+        CHECK(results[i] == secp256k1_ecdsa_verify(STATIC_CTX, &sigs[i], msghashes32[i], &pubkeys[i]));
+    }
+
+    CHECK_ILLEGAL(CTX, secp256k1_ecdsa_verify_many(CTX, NULL, sigs, &msghashes32[0][0], pubkeys, N_SIGS));
+    CHECK_ILLEGAL(CTX, secp256k1_ecdsa_verify_many(CTX, results, NULL, &msghashes32[0][0], pubkeys, N_SIGS));
+    CHECK_ILLEGAL(CTX, secp256k1_ecdsa_verify_many(CTX, results, sigs, NULL, pubkeys, N_SIGS));
+    CHECK_ILLEGAL(CTX, secp256k1_ecdsa_verify_many(CTX, results, sigs, &msghashes32[0][0], NULL, N_SIGS));
+    CHECK_ILLEGAL(CTX, secp256k1_ecdsa_verify_many(CTX, results, sigs, &msghashes32[0][0], pubkeys, 0));
+}
+
 /** Dummy nonce generation function that just uses a precomputed nonce, and fails if it is not accepted. Use only for testing. */
 static int precomputed_nonce_function(unsigned char *nonce32, const unsigned char *msg32, const unsigned char *key32, const unsigned char *algo16, void *data, unsigned int counter) {
     (void)msg32;
@@ -8223,6 +8265,7 @@ static const struct tf_test_entry tests_ecdsa[] = {
     CASE(ecdsa_der_parse),
     CASE(ecdsa_der_parse_long_form),
     CASE(ecdsa_sign_verify),
+    CASE(ecdsa_verify_many),
     CASE(ecdsa_end_to_end),
     CASE(ecdsa_edge_cases),
     CASE(ecdsa_wycheproof),

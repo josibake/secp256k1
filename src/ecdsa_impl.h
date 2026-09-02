@@ -280,6 +280,28 @@ static int secp256k1_ecdsa_sig_verify(const secp256k1_scalar *sigr, const secp25
     return secp256k1_ecdsa_sig_verify_with_sigs_inverse(sigr, &sigs_inv, pubkey, message);
 }
 
+/* Compute the inverse of each nonzero input using a single inversion. The
+ * inverse corresponding to a zero input is unspecified. */
+static void secp256k1_ecdsa_sig_inverse_var_many(secp256k1_scalar *r, const secp256k1_scalar *a, size_t len) {
+    secp256k1_scalar acc;
+    secp256k1_scalar acc_inv;
+    secp256k1_scalar one;
+    size_t i;
+
+    secp256k1_scalar_set_int(&one, 1);
+    acc = one;
+    for (i = 0; i < len; i++) {
+        r[i] = acc;
+        secp256k1_scalar_mul(&acc, &acc, secp256k1_scalar_is_zero(&a[i]) ? &one : &a[i]);
+    }
+    secp256k1_scalar_inverse_var(&acc_inv, &acc);
+    for (i = len; i > 0; i--) {
+        secp256k1_scalar prefix = r[i - 1];
+        secp256k1_scalar_mul(&r[i - 1], &acc_inv, &prefix);
+        secp256k1_scalar_mul(&acc_inv, &acc_inv, secp256k1_scalar_is_zero(&a[i - 1]) ? &one : &a[i - 1]);
+    }
+}
+
 static int secp256k1_ecdsa_sig_sign(const secp256k1_ecmult_gen_context *ecmult_gen_ctx, secp256k1_scalar *sigr, secp256k1_scalar *sigs, const secp256k1_scalar *seckey, const secp256k1_scalar *message, const secp256k1_scalar *nonce, int *recid) {
     unsigned char b[32];
     secp256k1_ge r;

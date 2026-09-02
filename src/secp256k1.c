@@ -388,6 +388,14 @@ static void secp256k1_ecdsa_signature_save(secp256k1_ecdsa_signature* sig, const
     }
 }
 
+static void secp256k1_ecdsa_signature_load_inverse_many(const secp256k1_context* ctx, secp256k1_scalar* r, secp256k1_scalar* s, secp256k1_scalar* s_inv, const secp256k1_ecdsa_signature* sigs, size_t n_sigs) {
+    size_t i;
+    for (i = 0; i < n_sigs; i++) {
+        secp256k1_ecdsa_signature_load(ctx, &r[i], &s[i], &sigs[i]);
+    }
+    secp256k1_ecdsa_sig_inverse_var_many(s_inv, s, n_sigs);
+}
+
 int secp256k1_ecdsa_signature_parse_der(const secp256k1_context* ctx, secp256k1_ecdsa_signature* sig, const unsigned char *input, size_t inputlen) {
     secp256k1_scalar r, s;
 
@@ -484,6 +492,44 @@ int secp256k1_ecdsa_verify(const secp256k1_context* ctx, const secp256k1_ecdsa_s
             secp256k1_pubkey_load(ctx, &q, pubkey) &&
             secp256k1_ecdsa_sig_verify(&r, &s, &q, &m));
 }
+
+#define SECP256K1_ECDSA_VERIFY_MANY_TILE_SIZE 64
+
+int secp256k1_ecdsa_verify_many(const secp256k1_context* ctx, unsigned char *results, const secp256k1_ecdsa_signature *sigs, const unsigned char *msghashes32, const secp256k1_pubkey *pubkeys, size_t n_sigs) {
+    secp256k1_scalar sigr[SECP256K1_ECDSA_VERIFY_MANY_TILE_SIZE];
+    secp256k1_scalar sigs_value[SECP256K1_ECDSA_VERIFY_MANY_TILE_SIZE];
+    secp256k1_scalar sigs_inverse[SECP256K1_ECDSA_VERIFY_MANY_TILE_SIZE];
+    size_t tile_start;
+
+    VERIFY_CHECK(ctx != NULL);
+    ARG_CHECK(results != NULL);
+    ARG_CHECK(sigs != NULL);
+    ARG_CHECK(msghashes32 != NULL);
+    ARG_CHECK(pubkeys != NULL);
+    ARG_CHECK(n_sigs > 0);
+
+    for (tile_start = 0; tile_start < n_sigs; tile_start += SECP256K1_ECDSA_VERIFY_MANY_TILE_SIZE) {
+        size_t tile_size = n_sigs - tile_start;
+        size_t i;
+        if (tile_size > SECP256K1_ECDSA_VERIFY_MANY_TILE_SIZE) {
+            tile_size = SECP256K1_ECDSA_VERIFY_MANY_TILE_SIZE;
+        }
+        secp256k1_ecdsa_signature_load_inverse_many(ctx, sigr, sigs_value, sigs_inverse, sigs + tile_start, tile_size);
+        for (i = 0; i < tile_size; i++) {
+            const size_t index = tile_start + i;
+            secp256k1_ge q;
+            secp256k1_scalar m;
+            secp256k1_scalar_set_b32(&m, &msghashes32[32 * index], NULL);
+            results[index] = (unsigned char)(!secp256k1_scalar_is_zero(&sigs_value[i]) &&
+                !secp256k1_scalar_is_high(&sigs_value[i]) &&
+                secp256k1_pubkey_load(ctx, &q, &pubkeys[index]) &&
+                secp256k1_ecdsa_sig_verify_with_sigs_inverse(&sigr[i], &sigs_inverse[i], &q, &m));
+        }
+    }
+    return 1;
+}
+
+#undef SECP256K1_ECDSA_VERIFY_MANY_TILE_SIZE
 
 static SECP256K1_INLINE void buffer_append(unsigned char *buf, unsigned int *offset, const void *data, unsigned int len) {
     memcpy(buf + *offset, data, len);
