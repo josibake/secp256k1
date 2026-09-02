@@ -14,4 +14,11 @@
 #define SECP256K1_ECDSA_IFMA_JOINT_TABLE (2 * SECP256K1_ECDSA_IFMA_Q_TABLE * SECP256K1_ECDSA_IFMA_Q_TABLE)
 #define SECP256K1_ECDSA_IFMA_TILE 128
 
+#if (defined(__GNUC__) || defined(__clang__)) && defined(__x86_64__) \
+    && defined(__AVX512F__) && defined(__AVX512DQ__) \
+    && defined(__AVX512IFMA__) && defined(SECP256K1_WIDEMUL_INT128) \
+    && !defined(EXHAUSTIVE_TEST_ORDER)
+#define SECP256K1_ECDSA_VERIFY_MANY_IFMA 1
+#endif
+
 #endif /* SECP256K1_ECDSA_IFMA_CONFIG_H */

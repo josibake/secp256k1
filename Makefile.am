@@ -82,7 +82,7 @@ noinst_HEADERS += examples/examples_util.h
 
 PRECOMPUTED_LIB = libsecp256k1_precomputed.la
 noinst_LTLIBRARIES = $(PRECOMPUTED_LIB)
-libsecp256k1_precomputed_la_SOURCES =  src/precomputed_ecmult.c src/precomputed_ecmult_gen.c
+libsecp256k1_precomputed_la_SOURCES = src/precomputed_ecmult.c src/precomputed_ecmult_gen.c src/precomputed_ecdsa_ifma.c
 # We need `-I$(top_srcdir)/src` in VPATH builds if libsecp256k1_precomputed_la_SOURCES have been recreated in the build tree.
 # This helps users and packagers who insist on recreating the precomputed files (e.g., Gentoo).
 libsecp256k1_precomputed_la_CPPFLAGS = -I$(top_srcdir)/src $(SECP_CONFIG_DEFINES)
@@ -255,8 +255,11 @@ src/precomputed_ecmult.c:
 src/precomputed_ecmult_gen.c:
 	$(MAKE) $(AM_MAKEFLAGS) precompute_ecmult_gen$(EXEEXT)
 	./precompute_ecmult_gen$(EXEEXT)
+src/precomputed_ecdsa_ifma.c:
+	$(MAKE) $(AM_MAKEFLAGS) precompute_ecdsa_ifma$(EXEEXT)
+	./precompute_ecdsa_ifma$(EXEEXT)
 
-PRECOMP = src/precomputed_ecmult_gen.c src/precomputed_ecmult.c
+PRECOMP = src/precomputed_ecmult_gen.c src/precomputed_ecmult.c src/precomputed_ecdsa_ifma.c
 precomp: $(PRECOMP)
 
 # Ensure the prebuilt files will be build first (only if they don't exist,
