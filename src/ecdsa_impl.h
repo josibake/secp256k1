@@ -192,9 +192,10 @@ static int secp256k1_ecdsa_sig_serialize(unsigned char *sig, size_t *size, const
     return 1;
 }
 
-static int secp256k1_ecdsa_sig_verify(const secp256k1_scalar *sigr, const secp256k1_scalar *sigs, const secp256k1_ge *pubkey, const secp256k1_scalar *message) {
+/* This function requires a valid inverse of a nonzero signature s value. */
+static int secp256k1_ecdsa_sig_verify_with_sigs_inverse(const secp256k1_scalar *sigr, const secp256k1_scalar *sigs_inverse, const secp256k1_ge *pubkey, const secp256k1_scalar *message) {
     unsigned char c[32];
-    secp256k1_scalar sn, u1, u2;
+    secp256k1_scalar u1, u2;
 #if !defined(EXHAUSTIVE_TEST_ORDER)
     int range;
     secp256k1_fe xr;
@@ -202,13 +203,12 @@ static int secp256k1_ecdsa_sig_verify(const secp256k1_scalar *sigr, const secp25
     secp256k1_gej pubkeyj;
     secp256k1_gej pr;
 
-    if (secp256k1_scalar_is_zero(sigr) || secp256k1_scalar_is_zero(sigs)) {
+    if (secp256k1_scalar_is_zero(sigr)) {
         return 0;
     }
 
-    secp256k1_scalar_inverse_var(&sn, sigs);
-    secp256k1_scalar_mul(&u1, &sn, message);
-    secp256k1_scalar_mul(&u2, &sn, sigr);
+    secp256k1_scalar_mul(&u1, sigs_inverse, message);
+    secp256k1_scalar_mul(&u2, sigs_inverse, sigr);
     secp256k1_gej_set_ge(&pubkeyj, pubkey);
     secp256k1_ecmult(&pr, &pubkeyj, &u2, &u1);
     if (secp256k1_gej_is_infinity(&pr)) {
@@ -269,6 +269,15 @@ static int secp256k1_ecdsa_sig_verify(const secp256k1_scalar *sigr, const secp25
     }
     return 0;
 #endif
+}
+
+static int secp256k1_ecdsa_sig_verify(const secp256k1_scalar *sigr, const secp256k1_scalar *sigs, const secp256k1_ge *pubkey, const secp256k1_scalar *message) {
+    secp256k1_scalar sigs_inv;
+    if (secp256k1_scalar_is_zero(sigr) || secp256k1_scalar_is_zero(sigs)) {
+        return 0;
+    }
+    secp256k1_scalar_inverse_var(&sigs_inv, sigs);
+    return secp256k1_ecdsa_sig_verify_with_sigs_inverse(sigr, &sigs_inv, pubkey, message);
 }
 
 static int secp256k1_ecdsa_sig_sign(const secp256k1_ecmult_gen_context *ecmult_gen_ctx, secp256k1_scalar *sigr, secp256k1_scalar *sigs, const secp256k1_scalar *seckey, const secp256k1_scalar *message, const secp256k1_scalar *nonce, int *recid) {
